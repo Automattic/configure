@@ -1,0 +1,37 @@
+[package]
+name = "configure"
+version = "0.1.0"
+authors = ["Jeremy Massel <jeremy.massel@automattic.com>"]
+edition = "2018"
+
+[lib]
+name = "configure"
+path = "src/lib.rs"
+
+[[bin]]
+name = "configure"
+path = "src/bin.rs"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+[dependencies]
+log = "0.4.0"
+dirs = "3.0.1"
+simplelog = "^0.7.6"
+sodiumoxide = "0.2.6"
+structopt = { version = "0.3", default-features = false }
+structopt-flags = "0.3"
+git2 = "0.13"
+console = "0.13.0"
+dialoguer = "0.7.1"
+indicatif = "0.15.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+ring = "0.16.18"
+base64 = "0.13.0"
+
+chrono = "0.4"
