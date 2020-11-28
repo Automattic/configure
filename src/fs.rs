@@ -8,6 +8,9 @@ use std::fs::{create_dir_all, remove_file, rename, File};
 use std::io::{BufReader, Error, Read, Write};
 use std::path::PathBuf;
 
+#[macro_use]
+use serde_json::json;
+
 /// Find the .configure file in the current project
 pub fn find_configure_file() -> PathBuf {
     let project_root = find_project_root();
@@ -40,7 +43,7 @@ pub fn find_keys_file() -> Result<PathBuf, ConfigureError> {
             "No keys file found at: {:?}. Creating one for you",
             keys_file_path
         );
-        create_file_with_contents(&keys_file_path, "{}").expect(
+        write_file_with_contents(&keys_file_path, "{}").expect(
             "There is no `keys.json` file in your secrets repository, and creating one failed",
         );
     }
@@ -108,11 +111,58 @@ pub fn save_configuration(configuration: &ConfigurationFile) -> Result<(), Error
     Ok(())
 }
 
+pub fn read_encryption_key(configuration: &ConfigurationFile) -> Result<Option<String>, ConfigureError> {
+    let keys_file_path = find_keys_file()?;
+
+    debug!("Reading keys from {:?}", keys_file_path);
+
+    let file = match File::open(keys_file_path) {
+        Ok(file) => file,
+        Err(_) => return Err(ConfigureError::KeysFileCannotBeRead),
+    };
+
+    let json: serde_json::Value = match serde_json::from_reader(file) {
+        Ok(json) => json,
+        Err(_) => return Err(ConfigureError::KeysFileIsNotValidJSON),
+    };
+
+    match json.get(&configuration.project_name) {
+        Some(key) => return Ok(Some(String::from(key.as_str().unwrap()))),
+        None => return Ok(None),
+    };
+}
+
+pub fn generate_encryption_key(configuration: &ConfigurationFile) -> Result<(), ConfigureError> {
+    let keys_file_path = find_keys_file()?;
+
+    let file = match File::open(&keys_file_path) {
+        Ok(file) => file,
+        Err(_) => return Err(ConfigureError::KeysFileCannotBeRead),
+    };
+
+    let mut json: serde_json::Value = match serde_json::from_reader(file) {
+        Ok(json) => json,
+        Err(_) => return Err(ConfigureError::KeysFileIsNotValidJSON),
+    };
+
+    json[&configuration.project_name] = json!("Foo!");
+
+    write_file_with_contents(&keys_file_path, &serde_json::to_string_pretty(&json).unwrap())?;
+
+    Ok(())
+}
+
 pub fn decrypt_files_for_configuration(
     configuration: &ConfigurationFile,
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root();
-    let encryption_key = configuration.get_encryption_key();
+    let encryption_key = match read_encryption_key(configuration) {
+        Ok(key)   => match key {
+            Some(value) => value,
+            None        => return Err(ConfigureError::MissingProjectKey),
+        },
+        Err(err)  => return Err(err),
+    };
 
     for file in &configuration.files_to_copy {
         let source = project_root.join(&file.get_encrypted_destination());
@@ -174,10 +224,16 @@ pub fn decrypt_files_for_configuration(
 
 pub fn write_encrypted_files_for_configuration(
     configuration: &ConfigurationFile,
-) -> Result<(), Error> {
+) -> Result<(), ConfigureError> {
     let project_root = find_project_root();
     let secrets_root = find_secrets_repo().unwrap();
-    let encryption_key = configuration.get_encryption_key();
+    let encryption_key = match read_encryption_key(configuration) {
+        Ok(key)   => match key {
+            Some(value) => value,
+            None        => return Err(ConfigureError::MissingProjectKey),
+        },
+        Err(err)  => return Err(err),
+    };
 
     for file in &configuration.files_to_copy {
         let source = &secrets_root.join(&file.source);
@@ -198,7 +254,7 @@ pub fn write_encrypted_files_for_configuration(
 }
 
 /// Helper method to create an empty file
-fn create_file_with_contents(path: &PathBuf, contents: &str) -> Result<(), std::io::Error> {
+fn write_file_with_contents(path: &PathBuf, contents: &str) -> Result<(), std::io::Error> {
     let mut file = File::create(path)?;
     file.write_all(contents.as_bytes())?;
     Ok(())

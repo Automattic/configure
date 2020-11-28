@@ -23,25 +23,6 @@ impl ConfigurationFile {
         self == &ConfigurationFile::default()
     }
 
-    pub fn get_encryption_key(&self) -> String {
-        let keys_file_path = crate::fs::find_keys_file().unwrap();
-
-        debug!("Reading keys from {:?}", keys_file_path);
-
-        let file = std::fs::File::open(keys_file_path).expect("keys file is not readable");
-
-        let json: serde_json::Value =
-            serde_json::from_reader(file).expect("keys.json should be valid JSON");
-
-        let encryption_key = json
-            .get(&self.project_name)
-            .expect("keys.json does not contain an encryption key for this project")
-            .as_str()
-            .expect("The encryption key for this project is invalid");
-
-        String::from(encryption_key)
-    }
-
     fn needs_project_name(&self) -> bool {
         self.project_name == ""
     }
@@ -83,6 +64,15 @@ pub enum ConfigureError {
 
     #[error("An encrypted file is missing – unable to apply secrets to project. Run `configure update` to fix this")]
     EncryptedFileMissing,
+
+    #[error("Unable to read keys.json file in your secrets repo")]
+    KeysFileCannotBeRead,
+
+    #[error("keys.json file in your secrets repo is not valid json")]
+    KeysFileIsNotValidJSON,
+
+    #[error("That project key is not defined in keys.json")]
+    MissingProjectKey
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -262,7 +252,13 @@ pub fn setup_configuration(mut configuration: ConfigurationFile) {
 
     info!("Writing changes to .configure");
 
+
     save_configuration(&configuration).expect("Unable to save configure file");
+
+    // Create a key in `keys.json` for the project if one doesn't already exist
+    if read_encryption_key(&configuration).unwrap() == None {
+        generate_encryption_key(&configuration).expect("Unable to automatically generate an encryption key for this project");
+    }
 }
 
 fn prompt_for_project_name_if_needed(mut configuration: ConfigurationFile) -> ConfigurationFile {
