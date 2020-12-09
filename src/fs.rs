@@ -7,17 +7,12 @@ use std::env;
 use std::fs::{create_dir_all, remove_file, rename, File};
 use std::io::{BufReader, Error, Read, Write};
 use std::path::PathBuf;
-
-#[macro_use]
 use serde_json::json;
 
 /// Find the .configure file in the current project
 pub fn find_configure_file() -> PathBuf {
-    let project_root = find_project_root();
 
-    let configure_file_path = project_root.join(".configure");
-
-    debug!("Configure file found at: {:?}", configure_file_path);
+    let configure_file_path = get_configure_file_path();
 
     if !configure_file_path.exists() {
         info!(
@@ -25,11 +20,17 @@ pub fn find_configure_file() -> PathBuf {
             configure_file_path
         );
 
-        save_configuration(&ConfigurationFile::default())
+        save_configuration_to(&ConfigurationFile::default(), &configure_file_path)
             .expect("There is no `configure.json` file in your project, and creating one failed");
     }
 
+    debug!("Configure file found at: {:?}", configure_file_path);
+
     configure_file_path
+}
+
+fn get_configure_file_path() -> PathBuf {
+     find_project_root().join(".configure")
 }
 
 pub fn find_keys_file() -> Result<PathBuf, ConfigureError> {
@@ -100,9 +101,11 @@ pub fn read_configuration() -> ConfigurationFile {
 }
 
 pub fn save_configuration(configuration: &ConfigurationFile) -> Result<(), Error> {
-    let serialized = serde_json::to_string_pretty(&configuration)?;
+    save_configuration_to(configuration, &find_configure_file())
+}
 
-    let configure_file = find_configure_file();
+fn save_configuration_to(configuration: &ConfigurationFile, configure_file: &PathBuf) -> Result<(), Error> {
+    let serialized = serde_json::to_string_pretty(&configuration)?;
 
     debug!("Writing to: {:?}", configure_file);
 
@@ -287,4 +290,23 @@ fn create_parent_directory_for_path_if_not_exists(path: &PathBuf) -> Result<(), 
     };
 
     Ok(create_dir_all(parent)?)
+}
+
+#[cfg(test)]
+mod tests {
+    // Import the parent scope
+    use super::*;
+
+    #[test]
+    fn test_find_configure_file_creates_it_if_missing() {
+        delete_configure_file();
+        find_configure_file();
+        assert!(get_configure_file_path().exists());
+    }
+
+    fn delete_configure_file() {
+        if get_configure_file_path().exists() {
+            std::fs::remove_file(get_configure_file_path()).unwrap();
+        }
+    }
 }
