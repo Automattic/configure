@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      uploadurl: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          body: ""
+          draft: true
+          prerelease: false
+  
+  # Build for Windows
+  windows:
+    runs-on: windows-latest
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --release
+      - name: Upload Artifact to Job
+        uses: actions/upload-artifact@v1
+        with:
+          name: configure.exe
+          path: target/release/configure.exe
+      - name: Package
+        id: package-windows-release-asset
+        run: Compress-Archive target/release/configure.exe configure-windows.zip
+      - name: Attach Artifact to Release
+        id: upload-windows-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.setup.outputs.uploadurl}}
+          asset_path: configure-windows.zip
+          asset_name: configure-windows.zip
+          asset_content_type: application/zip
+  # Build for Mac
+  mac:
+    runs-on: macos-latest
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --release
+      - name: Upload Artifact to Job
+        uses: actions/upload-artifact@v1
+        with:
+          name: configure-macos
+          path: target/release/configure
+      - name: Package
+        id: package-mac-release-asset
+        run: |
+          cd target/release
+          zip configure-macos.zip configure
+          mv configure-macos.zip ../../
+          cd -
+      - name: Attach Artifact to Release
+        id: upload-mac-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.setup.outputs.uploadurl}}
+          asset_path: configure-macos.zip
+          asset_name: configure-macos.zip
+          asset_content_type: application/zip
+  # Build for Linux
+  linux:
+    runs-on: ubuntu-latest
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --release
+      - name: Upload Artifact to Job
+        uses: actions/upload-artifact@v1
+        with:
+          name: configure-linux
+          path: target/release/configure
+      - name: Package
+        id: package-linux-release-asset
+        run: |
+          cd target/release
+          zip configure-linux.zip configure
+          mv configure-linux.zip ../../
+          cd -
+      - name: Attach Artifact to Release
+        id: upload-linux-release-asset 
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{needs.setup.outputs.uploadurl}}
+          asset_path: configure-linux.zip
+          asset_name: configure-linux.zip
+          asset_content_type: application/zip
