@@ -3,15 +3,15 @@ use crate::ConfigurationFile;
 use crate::ConfigureError;
 use log::{debug, info};
 use ring::digest::{Context, SHA256};
+use serde_json::json;
 use std::env;
 use std::fs::{create_dir_all, remove_file, rename, File};
 use std::io::{BufReader, Error, Read, Write};
+use std::path::Path;
 use std::path::PathBuf;
-use serde_json::json;
 
 /// Find the .configure file in the current project
 pub fn find_configure_file() -> PathBuf {
-
     let configure_file_path = get_configure_file_path();
 
     if !configure_file_path.exists() {
@@ -30,7 +30,7 @@ pub fn find_configure_file() -> PathBuf {
 }
 
 fn get_configure_file_path() -> PathBuf {
-     find_project_root().join(".configure")
+    find_project_root().join(".configure")
 }
 
 pub fn find_keys_file() -> Result<PathBuf, ConfigureError> {
@@ -64,7 +64,13 @@ pub fn find_project_root() -> PathBuf {
 }
 
 pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
-    // TODO: Allow the user to set their own mobile secrets path using an environment variable
+    if let Ok(var) = env::var(crate::SECRETS_KEY_NAME) {
+        let user_secrets_path = Path::new(&var);
+
+        if user_secrets_path.exists() && user_secrets_path.is_dir() {
+            return Ok(user_secrets_path.to_path_buf());
+        }
+    }
 
     let home_dir = dirs::home_dir().expect("Unable to determine user home directory");
 
@@ -104,7 +110,10 @@ pub fn save_configuration(configuration: &ConfigurationFile) -> Result<(), Error
     save_configuration_to(configuration, &find_configure_file())
 }
 
-fn save_configuration_to(configuration: &ConfigurationFile, configure_file: &PathBuf) -> Result<(), Error> {
+fn save_configuration_to(
+    configuration: &ConfigurationFile,
+    configure_file: &PathBuf,
+) -> Result<(), Error> {
     let serialized = serde_json::to_string_pretty(&configuration)?;
 
     debug!("Writing to: {:?}", configure_file);
@@ -114,7 +123,9 @@ fn save_configuration_to(configuration: &ConfigurationFile, configure_file: &Pat
     Ok(())
 }
 
-pub fn read_encryption_key(configuration: &ConfigurationFile) -> Result<Option<String>, ConfigureError> {
+pub fn read_encryption_key(
+    configuration: &ConfigurationFile,
+) -> Result<Option<String>, ConfigureError> {
     let keys_file_path = find_keys_file()?;
 
     debug!("Reading keys from {:?}", keys_file_path);
@@ -150,7 +161,10 @@ pub fn generate_encryption_key(configuration: &ConfigurationFile) -> Result<(), 
 
     json[&configuration.project_name] = json!("Foo!");
 
-    write_file_with_contents(&keys_file_path, &serde_json::to_string_pretty(&json).unwrap())?;
+    write_file_with_contents(
+        &keys_file_path,
+        &serde_json::to_string_pretty(&json).unwrap(),
+    )?;
 
     Ok(())
 }
@@ -160,11 +174,11 @@ pub fn decrypt_files_for_configuration(
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root();
     let encryption_key = match read_encryption_key(configuration) {
-        Ok(key)   => match key {
+        Ok(key) => match key {
             Some(value) => value,
-            None        => return Err(ConfigureError::MissingProjectKey),
+            None => return Err(ConfigureError::MissingProjectKey),
         },
-        Err(err)  => return Err(err),
+        Err(err) => return Err(err),
     };
 
     for file in &configuration.files_to_copy {
@@ -211,7 +225,6 @@ pub fn decrypt_files_for_configuration(
             } else {
                 debug!("Keeping backup file because it differs from the original");
             }
-
         } else {
             // Encrypt the file and write the encrypted contents to the destination
             debug!(
@@ -231,11 +244,11 @@ pub fn write_encrypted_files_for_configuration(
     let project_root = find_project_root();
     let secrets_root = find_secrets_repo().unwrap();
     let encryption_key = match read_encryption_key(configuration) {
-        Ok(key)   => match key {
+        Ok(key) => match key {
             Some(value) => value,
-            None        => return Err(ConfigureError::MissingProjectKey),
+            None => return Err(ConfigureError::MissingProjectKey),
         },
-        Err(err)  => return Err(err),
+        Err(err) => return Err(err),
     };
 
     for file in &configuration.files_to_copy {

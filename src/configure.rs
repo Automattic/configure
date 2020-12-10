@@ -1,8 +1,8 @@
 use crate::fs::*;
 use crate::git::*;
 use crate::ui::*;
-use indicatif::ProgressBar;
 use chrono::prelude::*;
+use indicatif::ProgressBar;
 
 use console::style;
 use log::{debug, info};
@@ -72,7 +72,7 @@ pub enum ConfigureError {
     KeysFileIsNotValidJSON,
 
     #[error("That project key is not defined in keys.json")]
-    MissingProjectKey
+    MissingProjectKey,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -99,23 +99,21 @@ impl File {
             None => std::path::Path::new("/"),
         };
 
-
         let file_stem = path.file_stem().unwrap().to_str().unwrap_or("");
         let datetime = Local::now().format("%Y-%m-%d-%H-%M-%S").to_string();
-        let extension = path.extension().unwrap_or(std::ffi::OsStr::new("")).to_str().unwrap_or("");
+        let extension = path
+            .extension()
+            .unwrap_or(std::ffi::OsStr::new(""))
+            .to_str()
+            .unwrap_or("");
 
         let filename = format!("{:}-{:}.{:}.bak", file_stem, datetime, extension);
 
-        return directory
-            .join(filename)
-            .to_str()
-            .unwrap()
-            .to_string();
-
+        return directory.join(filename).to_str().unwrap().to_string();
     }
 }
 
-pub fn apply_configuration(configuration: ConfigurationFile) {
+pub fn apply_configuration(configuration: &ConfigurationFile) {
     // Decrypt the project's configuration files
     decrypt_files_for_configuration(&configuration).expect("Unable to decrypt and copy files");
 
@@ -124,7 +122,10 @@ pub fn apply_configuration(configuration: ConfigurationFile) {
     info!("Done")
 }
 
-pub fn update_configuration(mut configuration: ConfigurationFile) {
+pub fn update_configuration(
+    mut configuration: ConfigurationFile,
+    interactive: bool,
+) -> ConfigurationFile {
     let starting_branch =
         get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
     let starting_ref =
@@ -147,7 +148,9 @@ pub fn update_configuration(mut configuration: ConfigurationFile) {
     //
     // Step 2 – Check if the user wants to use a different secrets branch
     //
-    configuration = prompt_for_branch(configuration, true);
+    if interactive {
+        configuration = prompt_for_branch(configuration, true);
+    }
 
     //
     // Step 3 – Check if the currente configuration branch is in sync with the server or not.or
@@ -155,26 +158,30 @@ pub fn update_configuration(mut configuration: ConfigurationFile) {
     //
     let status = get_secrets_repo_status().expect("Unable to get secrets repo status");
 
-    let should_continue = match status.sync_state {
-        RepoSyncState::Ahead => {
-            warn(&format!(
-                "Your local secrets repo has {:?} change(s) that the server does not",
-                status.distance
-            ));
-            confirm("Would you like to continue?")
-        }
-        RepoSyncState::Behind => {
-            warn(&format!(
-                "The server has {:?} change(s) that your local secrets repo does not",
-                status.distance
-            ));
-            confirm("Would you like to continue?")
-        }
-        RepoSyncState::Synced => true,
-    };
+    let should_continue = interactive
+        && match status.sync_state {
+            RepoSyncState::Ahead => {
+                warn(&format!(
+                    "Your local secrets repo has {:?} change(s) that the server does not",
+                    status.distance
+                ));
+
+                confirm("Would you like to continue?")
+            }
+            RepoSyncState::Behind => {
+                warn(&format!(
+                    "The server has {:?} change(s) that your local secrets repo does not",
+                    status.distance
+                ));
+
+                confirm("Would you like to continue?")
+            }
+            RepoSyncState::Synced => true,
+        };
 
     if !should_continue {
-        return;
+        debug!("Exiting without updating hash");
+        return configuration;
     }
 
     //
@@ -191,7 +198,7 @@ pub fn update_configuration(mut configuration: ConfigurationFile) {
         );
 
         // Prompt to update to most recent secrets data in the branch
-        if confirm(&message) {
+        if interactive && confirm(&message) {
             let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
                 .expect("Unable to fetch latest commit hash");
 
@@ -204,6 +211,12 @@ pub fn update_configuration(mut configuration: ConfigurationFile) {
                 .expect("Unable to check out branch at revision");
             configuration.pinned_hash = latest_commit_hash;
         }
+    }
+    // update the pinned hash even if nothing has changed – this helps fill in the blanks when creating a `.configure` file by hand
+    else {
+        let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
+            .expect("Unable to fetch latest commit hash");
+        configuration.pinned_hash = latest_commit_hash;
     }
 
     //
@@ -226,7 +239,12 @@ pub fn update_configuration(mut configuration: ConfigurationFile) {
     //
     // Step 8 – Apply these changes to the current repo
     //
-    apply_configuration(configuration);
+    apply_configuration(&configuration);
+
+    //
+    // Step 9 - All done!
+    //
+    configuration
 }
 
 pub fn validate_configuration(configuration: ConfigurationFile) {
@@ -252,12 +270,12 @@ pub fn setup_configuration(mut configuration: ConfigurationFile) {
 
     info!("Writing changes to .configure");
 
-
     save_configuration(&configuration).expect("Unable to save configure file");
 
     // Create a key in `keys.json` for the project if one doesn't already exist
     if read_encryption_key(&configuration).unwrap() == None {
-        generate_encryption_key(&configuration).expect("Unable to automatically generate an encryption key for this project");
+        generate_encryption_key(&configuration)
+            .expect("Unable to automatically generate an encryption key for this project");
     }
 }
 
@@ -389,4 +407,28 @@ fn configure_file_distance_behind_secrets_repo(
         .expect("Unable to roll back to branch");
 
     distance
+}
+
+#[cfg(test)]
+mod tests {
+    // Import the parent scope
+    //use super::*;
+    //use crate::SECRETS_KEY_NAME;
+
+    // #[test]
+    // fn test_that_pinned_hash_is_updated_when_running_update_on_empty_file() {
+    //     use_test_keys();
+    //     let mut test_conf = ConfigurationFile::default();
+    //     test_conf.project_name = "Test Project 1".to_string();
+    //     test_conf.branch = "trunk".to_string();
+
+    //     update_configuration(test_conf, false);
+    // }
+
+    // fn use_test_keys() {
+    //     let project_root = std::env::current_dir().unwrap();
+    //     let tests_dir = project_root.join("tests");
+    //     assert!(tests_dir.exists() && tests_dir.is_dir());
+    //     std::env::set_var(SECRETS_KEY_NAME, tests_dir);
+    // }
 }
