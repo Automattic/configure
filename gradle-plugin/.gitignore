@@ -1,0 +1,24 @@
+.gradle
+vendor
+build
+
+# Intellij project files
+*.iml
+*.ipr
+*.iws
+.idea/*
+
+# IntelliJ/Android Studio exceptions
+!.idea/vcs.xml
+!.idea/codeStyles/
+!.idea/fileTemplates/
+!.idea/inspectionProfiles/
+!.idea/scopes/
+!.idea/codeStyleSettings.xml
+!.idea/encodings.xml
+!.idea/copyright/
+!.idea/compiler.xml
+# Enforce plugins
+!.idea/externalDependencies.xml
+# Checkstyle configuration
+!.idea/checkstyle-idea.xml
