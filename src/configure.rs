@@ -7,7 +7,7 @@ use indicatif::ProgressBar;
 use console::style;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
-
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -126,25 +126,43 @@ impl File {
         self.destination.clone()
     }
 
-    pub fn get_backup_destination(&self) -> String {
-        let path = std::path::Path::new(&self.destination);
+    pub fn get_backup_destination(&self) -> PathBuf {
+        self.get_backup_destination_for_date(Utc::now())
+    }
 
-        let directory = match path.parent() {
-            Some(parent) => parent,
-            None => std::path::Path::new("/"),
-        };
+    fn get_backup_destination_for_date(&self, date: DateTime<Utc>) -> PathBuf {
 
-        let file_stem = path.file_stem().unwrap().to_str().unwrap_or("");
-        let datetime = Local::now().format("%Y-%m-%d-%H-%M-%S").to_string();
+        let path = Path::new(&self.destination);
+
+        let directory = path
+            .parent()
+            .unwrap_or(Path::new("/")); // If we're at the root of the file system
+
+        let file_stem = path
+            .file_stem()
+            .unwrap_or_default()  // Ensure one exists
+            .to_str()             // Convert from OsStr
+            .unwrap_or_default(); // Blank on failure
+
         let extension = path
             .extension()
             .unwrap_or_default()
             .to_str()
-            .unwrap_or("");
+            .unwrap_or_default();
 
-        let filename = format!("{:}-{:}.{:}.bak", file_stem, datetime, extension);
+        let datetime = date
+            .format("%Y-%m-%d-%H-%M-%S")
+            .to_string();
 
-        return directory.join(filename).to_str().unwrap().to_string();
+        let filename: String;
+
+        if extension.is_empty() {
+            filename = format!("{:}-{:}.bak", file_stem, datetime);
+        } else {
+            filename = format!("{:}-{:}.{:}.bak", file_stem, datetime, extension);
+        }
+
+        return directory.join(filename)
     }
 }
 
@@ -448,7 +466,6 @@ fn configure_file_distance_behind_secrets_repo(
 mod tests {
     // Import the parent scope
     use super::*;
-    //use crate::SECRETS_KEY_NAME;
 
     #[test]
     fn test_that_default_configuration_needs_project_name() {
@@ -480,6 +497,39 @@ mod tests {
         assert!(Configuration::default().is_empty())
     }
 
+    #[test]
+    fn test_that_get_encrypted_destination_ends_in_enc_extension() {
+        let file = File { source: "".to_string(), destination: ".configure-files/file".to_string() };
+        assert_eq!(file.get_encrypted_destination(), ".configure-files/file.enc")
+    }
+
+    #[test]
+    fn test_that_get_decrypted_destination_matches_starting_filename() {
+        let file = File { source: "".to_string(), destination: ".configure-files/file".to_string() };
+        assert_eq!(file.get_decrypted_destination(), ".configure-files/file")
+    }
+
+    #[test]
+    fn test_that_get_backup_destination_has_bak_extension() {
+        let file = File { source: "".to_string(), destination: ".configure-files/file".to_string() };
+        assert_eq!(file.get_backup_destination().extension().unwrap(), "bak")
+    }
+
+    #[test]
+    fn test_that_get_backup_destination_works_for_files_in_filesystem_root() {
+        let file = File { source: "".to_string(), destination: "/.configure-files/file.txt".to_string() };
+        assert_eq!(file.get_backup_destination_for_date(get_zero_date()).to_str(), Some("/.configure-files/file-1970-01-01-00-00-00.txt.bak"))
+    }
+
+    #[test]
+    fn test_that_get_backup_destination_works_for_files_without_extension() {
+        let file = File { source: "".to_string(), destination: ".configure-files/file".to_string() };
+        assert_eq!(file.get_backup_destination_for_date(get_zero_date()).to_str(), Some(".configure-files/file-1970-01-01-00-00-00.bak"))
+    }
+
+    fn get_zero_date() -> DateTime<Utc> {
+        Utc.timestamp(0, 0)
+    }
     // #[test]
     // fn test_that_pinned_hash_is_updated_when_running_update_on_empty_file() {
     //     use_test_keys();
