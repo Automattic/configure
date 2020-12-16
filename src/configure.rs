@@ -59,6 +59,9 @@ pub enum ConfigureError {
     #[error("Invalid git status")]
     GitStatusUnknownError,
 
+    #[error("Unable to find the root of the respository – are you sure you're running this inside a git repo?")]
+    ProjectNotPresent,
+
     #[error("No secrets repository could be found on this machine")]
     SecretsNotPresent,
 
@@ -372,7 +375,7 @@ fn prompt_to_add_file() -> Option<File> {
     let relative_destination_file_path =
         prompt("Enter the destination file path (relative to the project root):");
 
-    let project_root = find_project_root();
+    let project_root = find_project_root().unwrap();
     let full_destination_file_path = project_root.join(&relative_destination_file_path);
 
     debug!("Destination: {:?}", full_destination_file_path);

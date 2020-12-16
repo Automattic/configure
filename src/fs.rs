@@ -31,7 +31,7 @@ pub fn find_configure_file() -> PathBuf {
 }
 
 fn get_configure_file_path() -> PathBuf {
-    find_project_root().join(".configure")
+    find_project_root().unwrap().join(".configure")
 }
 
 pub fn find_keys_file() -> Result<PathBuf, ConfigureError> {
@@ -53,15 +53,22 @@ pub fn find_keys_file() -> Result<PathBuf, ConfigureError> {
     Ok(keys_file_path)
 }
 
-pub fn find_project_root() -> PathBuf {
+pub fn find_project_root() -> Result<PathBuf, ConfigureError> {
     let path = env::current_dir().expect("Unable to determine current directory");
 
-    let repo = git2::Repository::discover(&path)
-        .expect("Unable to find the root of the respository – are you sure you're running this inside a git repo?");
+    let repo = match git2::Repository::discover(&path) {
+        Ok(repo) => repo,
+        Err(_) => return Err(ConfigureError::ProjectNotPresent)
+    };
 
     debug!("Discovered Repository at {:?}", &path);
 
-    repo.workdir().unwrap().to_path_buf()
+    let project_root = match repo.workdir() {
+        Some(dir) => dir,
+        None => return Err(ConfigureError::ProjectNotPresent)
+    };
+
+    Ok(project_root.to_path_buf())
 }
 
 pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
@@ -177,7 +184,7 @@ fn save_keys(destination: &PathBuf, keys: &HashMap<String, String>) -> Result<()
 pub fn decrypt_files_for_configuration(
     configuration: &ConfigurationFile,
 ) -> Result<(), ConfigureError> {
-    let project_root = find_project_root();
+    let project_root = find_project_root()?;
 
     let encryption_key;
 
@@ -251,7 +258,7 @@ pub fn write_encrypted_files_for_configuration(
     configuration: &ConfigurationFile,
     encryption_key: String,
 ) -> Result<(), ConfigureError> {
-    let project_root = find_project_root();
+    let project_root = find_project_root()?;
     let secrets_root = find_secrets_repo()?;
 
     for file in &configuration.files_to_copy {
