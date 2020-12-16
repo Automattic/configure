@@ -36,11 +36,21 @@ enum Command {
     /// This command will download the latest mobile secrets commits from the repo
     /// and update the pinned commit hash in the `.configure` file to the newest commit
     /// in the branch specified by `.configure`.
-    Update,
+    Update {
+        /// Run the command in non-interactive mode (useful for CI or embedded contexts)
+        ///
+        #[structopt(short = "f", long = "force")]
+        should_run_noninteractive: bool,
+    },
 
     /// Decrypt the current mobile secrets for this project.
     ///
-    Apply,
+    Apply {
+        /// Run the command in non-interactive mode (useful for CI or embedded contexts)
+        ///
+        #[structopt(short = "f", long = "force")]
+        should_run_noninteractive: bool,
+    },
 
     /// Change mobile secrets settings
     ///
@@ -68,10 +78,14 @@ pub fn main() {
     debug!("libconfigure initialized");
 
     match Options::from_args().command {
-        Command::Apply => configure::apply(),
-        Command::Update => configure::update(),
+        Command::Apply {
+            should_run_noninteractive,
+        } => configure::apply(!should_run_noninteractive),
+        Command::Update {
+            should_run_noninteractive,
+        } => configure::update(!should_run_noninteractive),
         Command::Init => configure::init(),
         Command::Validate => configure::validate(),
-        Command::CreateKey => println!("{:?}", configure::generate_encryption_key()),
+        Command::CreateKey => println!("{:}", configure::generate_encryption_key()),
     }
 }
