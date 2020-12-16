@@ -13,14 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Extract Tag
-        run: echo "TAG_NAME=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+        run: echo "TAG_NAME=${GITHUB_REF#refs/*/}" | xargs >> $GITHUB_ENV
 
       - name: Validate Build Products
         run: |
 
           # Ensure that the binary and the plugin versions are in sync before continuing
-          BINARY_VERSION=$(cargo build && ./target/debug/configure --version | sed "s/configure //" )
-          PLUGIN_VERSION=$(cd gradle-plugin && ./gradlew -q printVersion)
+          BINARY_VERSION=$(cargo build && ./target/debug/configure --version | sed "s/configure //" | xargs )
+          PLUGIN_VERSION=$(cd gradle-plugin && ./gradlew -q printVersion | xargs)
 
           echo "Binary Version: $BINARY_VERSION"
           echo "Plugin Version: $PLUGIN_VERSION"
