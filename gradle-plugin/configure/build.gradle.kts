@@ -2,7 +2,7 @@ import com.novoda.gradle.release.PublishExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 /// The plugin version number – change this to match whatever your tag will be
-version = "0.1.10"
+version = "0.1.14"
 group = "com.automattic.android"
 
 buildscript {
