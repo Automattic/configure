@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 /// Find the .configure file in the current project
 pub fn find_configure_file() -> PathBuf {
-    let configure_file_path = get_configure_file_path();
+    let configure_file_path = get_configure_file_path().unwrap();
 
     if !configure_file_path.exists() {
         info!(
@@ -30,8 +30,9 @@ pub fn find_configure_file() -> PathBuf {
     configure_file_path
 }
 
-fn get_configure_file_path() -> PathBuf {
-    find_project_root().unwrap().join(".configure")
+fn get_configure_file_path() -> Result<PathBuf, ConfigureError> {
+    let project_root = find_project_root()?;
+    Ok(project_root.join(".configure"))
 }
 
 pub fn find_keys_file() -> Result<PathBuf, ConfigureError> {
