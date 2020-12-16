@@ -12,19 +12,28 @@ jobs:
       uploadurl: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - uses: actions/checkout@v2
+      - name: Extract Tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+
       - name: Validate Build Products
         run: |
+
           # Ensure that the binary and the plugin versions are in sync before continuing
-          BINARY_VERSION=$(cargo build && ./target/debug/configure --version | sed "s/configure//" )
+          BINARY_VERSION=$(cargo build && ./target/debug/configure --version | sed "s/configure //" )
           PLUGIN_VERSION=$(cd gradle-plugin && ./gradlew -q printVersion)
 
           echo "Binary Version: $BINARY_VERSION"
           echo "Plugin Version: $PLUGIN_VERSION"
+          echo "Tagged Version: $TAG_NAME"
 
-          if [ "$BINARY_VERSION" != "$PLUGIN_VERSION" ]
+          if [ "$BINARY_VERSION" != "$PLUGIN_VERSION" ] || [ "$TAG_NAME" != "BINARY_VERSION" ]
           then
+            echo "Binary version, plugin version, and tag name don't match. They must be the same before creating a new release. Please fix this issue, then re-tag."
             exit 1
           fi
+
+          # Ensure that the git repo is clean
+          git diff-index --quiet HEAD
       - name: Create Release
         id: create_release
         uses: actions/create-release@latest
