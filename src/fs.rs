@@ -1,5 +1,5 @@
 use crate::encryption::{decrypt_file, encrypt_file, generate_key};
-use crate::ConfigurationFile;
+use crate::Configuration;
 use crate::ConfigureError;
 use log::{debug, info};
 use ring::digest::{Context, SHA256};
@@ -21,7 +21,7 @@ pub fn find_configure_file() -> Result<PathBuf, ConfigureError> {
             configure_file_path
         );
 
-        write_configuration_to(&ConfigurationFile::default(), &configure_file_path)?
+        write_configuration_to(&Configuration::default(), &configure_file_path)?
     }
 
     debug!("Configure file found at: {:?}", configure_file_path);
@@ -101,7 +101,7 @@ pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
     Err(crate::configure::ConfigureError::SecretsNotPresent)
 }
 
-pub fn read_configuration() -> Result<ConfigurationFile, ConfigureError> {
+pub fn read_configuration() -> Result<Configuration, ConfigureError> {
     let configure_file_path = find_configure_file()?;
 
     let mut file = match File::open(&configure_file_path) {
@@ -115,16 +115,16 @@ pub fn read_configuration() -> Result<ConfigurationFile, ConfigureError> {
         Err(_) => return Err(ConfigureError::ConfigureFileNotReadable),
     };
 
-    ConfigurationFile::from_str(file_contents)
+    Configuration::from_str(file_contents)
 }
 
-pub fn write_configuration(configuration: &ConfigurationFile) -> Result<(), ConfigureError> {
+pub fn write_configuration(configuration: &Configuration) -> Result<(), ConfigureError> {
     let configuration_file = find_configure_file()?;
     write_configuration_to(configuration, &configuration_file)
 }
 
 fn write_configuration_to(
-    configuration: &ConfigurationFile,
+    configuration: &Configuration,
     configure_file: &PathBuf,
 ) -> Result<(), ConfigureError> {
     let serialized = configuration.to_string()?;
@@ -143,7 +143,7 @@ fn write_configuration_to(
 }
 
 pub fn generate_encryption_key_if_needed(
-    configuration: &ConfigurationFile,
+    configuration: &Configuration,
 ) -> Result<(), ConfigureError> {
     if encryption_key_for_configuration(&configuration).is_ok() {
         return Ok(());
@@ -158,7 +158,7 @@ pub fn generate_encryption_key_if_needed(
 }
 
 pub fn encryption_key_for_configuration(
-    configuration: &ConfigurationFile,
+    configuration: &Configuration,
 ) -> Result<String, ConfigureError> {
     let keys_file_path = find_keys_file()?;
 
@@ -205,7 +205,7 @@ fn save_keys(destination: &PathBuf, keys: &HashMap<String, String>) -> Result<()
 }
 
 pub fn decrypt_files_for_configuration(
-    configuration: &ConfigurationFile,
+    configuration: &Configuration,
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root()?;
 
@@ -278,7 +278,7 @@ pub fn decrypt_files_for_configuration(
 }
 
 pub fn write_encrypted_files_for_configuration(
-    configuration: &ConfigurationFile,
+    configuration: &Configuration,
     encryption_key: String,
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root()?;

@@ -11,19 +11,19 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct ConfigurationFile {
+pub struct Configuration {
     pub project_name: String,
     pub branch: String,
     pub pinned_hash: String,
     pub files_to_copy: Vec<File>,
 }
 
-impl ConfigurationFile {
+impl Configuration {
     pub fn is_empty(&self) -> bool {
-        self == &ConfigurationFile::default()
+        self == &Configuration::default()
     }
 
-    pub fn from_str(string: String) -> Result<ConfigurationFile, ConfigureError> {
+    pub fn from_str(string: String) -> Result<Configuration, ConfigureError> {
         match serde_json::from_str(&string) {
             Ok(configuration) => return Ok(configuration),
             Err(_) => return Err(ConfigureError::ConfigureFileNotValid),
@@ -50,10 +50,10 @@ impl ConfigurationFile {
     }
 }
 
-impl Default for ConfigurationFile {
+impl Default for Configuration {
     fn default() -> Self {
         let files_to_copy: Vec<File> = Vec::new();
-        ConfigurationFile {
+        Configuration {
             project_name: "".to_string(),
             branch: "".to_string(),
             pinned_hash: "".to_string(),
@@ -148,7 +148,7 @@ impl File {
     }
 }
 
-pub fn apply_configuration(configuration: &ConfigurationFile) {
+pub fn apply_configuration(configuration: &Configuration) {
     // Decrypt the project's configuration files
     decrypt_files_for_configuration(&configuration).expect("Unable to decrypt and copy files");
 
@@ -158,9 +158,9 @@ pub fn apply_configuration(configuration: &ConfigurationFile) {
 }
 
 pub fn update_configuration(
-    mut configuration: ConfigurationFile,
+    mut configuration: Configuration,
     interactive: bool,
-) -> ConfigurationFile {
+) -> Configuration {
     let starting_branch =
         get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
     let starting_ref =
@@ -284,11 +284,11 @@ pub fn update_configuration(
     configuration
 }
 
-pub fn validate_configuration(configuration: ConfigurationFile) {
+pub fn validate_configuration(configuration: Configuration) {
     println!("{:?}", configuration);
 }
 
-pub fn setup_configuration(mut configuration: ConfigurationFile) {
+pub fn setup_configuration(mut configuration: Configuration) {
     heading("Configure Setup");
     println!("Let's get configuration set up for this project.");
     newline();
@@ -314,7 +314,7 @@ pub fn setup_configuration(mut configuration: ConfigurationFile) {
         .expect("Unable to generate an encryption key for this project");
 }
 
-fn prompt_for_project_name_if_needed(mut configuration: ConfigurationFile) -> ConfigurationFile {
+fn prompt_for_project_name_if_needed(mut configuration: Configuration) -> Configuration {
     // If there's already a project name, don't bother updating it
     if !configuration.needs_project_name() {
         return configuration;
@@ -327,7 +327,7 @@ fn prompt_for_project_name_if_needed(mut configuration: ConfigurationFile) -> Co
     configuration
 }
 
-fn prompt_for_branch(mut configuration: ConfigurationFile, force: bool) -> ConfigurationFile {
+fn prompt_for_branch(mut configuration: Configuration, force: bool) -> Configuration {
     // If there's already a branch set, don't bother updating it
     if !configuration.needs_branch() && !force {
         return configuration;
@@ -355,7 +355,7 @@ fn prompt_for_branch(mut configuration: ConfigurationFile, force: bool) -> Confi
     configuration
 }
 
-fn set_latest_hash_if_needed(mut configuration: ConfigurationFile) -> ConfigurationFile {
+fn set_latest_hash_if_needed(mut configuration: Configuration) -> Configuration {
     if !configuration.needs_pinned_hash() {
         return configuration;
     }
@@ -367,7 +367,7 @@ fn set_latest_hash_if_needed(mut configuration: ConfigurationFile) -> Configurat
     configuration
 }
 
-fn prompt_to_add_files(mut configuration: ConfigurationFile) -> ConfigurationFile {
+fn prompt_to_add_files(mut configuration: Configuration) -> Configuration {
     let mut files = configuration.files_to_copy;
 
     let mut message = "Would you like to add files?";
@@ -419,7 +419,7 @@ fn prompt_to_add_file() -> Option<File> {
 }
 
 fn configure_file_distance_behind_secrets_repo(
-    configuration: &ConfigurationFile,
+    configuration: &Configuration,
     branch_name: &str,
 ) -> i32 {
     debug!("Checking if configure file is behind secrets repo");
