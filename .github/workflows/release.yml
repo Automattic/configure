@@ -18,9 +18,23 @@ jobs:
       - name: Validate Build Products
         run: |
 
+          strLen() {
+            local bytlen sreal oLang=$LANG oLcAll=$LC_ALL
+            LANG=C LC_ALL=C
+            bytlen=${#1}
+            printf -v sreal %q "$1"
+            LANG=$oLang LC_ALL=$oLcAll
+            printf "String '%s' is %d bytes, but %d chars len: %s.\n" "$1" $bytlen ${#1} "$sreal"
+          }
+
+
           # Ensure that the binary and the plugin versions are in sync before continuing
           BINARY_VERSION=$(cargo build && ./target/debug/configure --version | sed "s/configure //" | xargs )
           PLUGIN_VERSION=$(cd gradle-plugin && ./gradlew -q printVersion | xargs)
+
+          strLen $BINARY_VERSION
+          strLen $PLUGIN_VERSION
+          strLen $TAG_NAME
 
           echo "Binary Version: $BINARY_VERSION"
           echo "Plugin Version: $PLUGIN_VERSION"
