@@ -526,9 +526,8 @@ mod tests {
             destination: "/.configure-files/file.txt".to_string(),
         };
         assert_eq!(
-            file.get_backup_destination_for_date(get_zero_date())
-                .to_str(),
-            Some("/.configure-files/file-1970-01-01-00-00-00.txt.bak")
+            file.get_backup_destination_for_date(get_zero_date()),
+            Path::new("/.configure-files").join("file-1970-01-01-00-00-00.txt.bak")
         )
     }
 
@@ -539,9 +538,8 @@ mod tests {
             destination: ".configure-files/file".to_string(),
         };
         assert_eq!(
-            file.get_backup_destination_for_date(get_zero_date())
-                .to_str(),
-            Some(".configure-files/file-1970-01-01-00-00-00.bak")
+            file.get_backup_destination_for_date(get_zero_date()),
+            Path::new(".configure-files").join("file-1970-01-01-00-00-00.bak")
         )
     }
 
