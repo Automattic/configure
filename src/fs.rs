@@ -12,8 +12,8 @@ use std::path::Path;
 use std::path::PathBuf;
 
 /// Find the .configure file in the current project
-pub fn find_configure_file() -> PathBuf {
-    let configure_file_path = get_configure_file_path().unwrap();
+pub fn find_configure_file() -> Result<PathBuf, ConfigureError> {
+    let configure_file_path = get_configure_file_path()?;
 
     if !configure_file_path.exists() {
         info!(
@@ -21,13 +21,12 @@ pub fn find_configure_file() -> PathBuf {
             configure_file_path
         );
 
-        save_configuration_to(&ConfigurationFile::default(), &configure_file_path)
-            .expect("There is no `configure.json` file in your project, and creating one failed");
+        save_configuration_to(&ConfigurationFile::default(), &configure_file_path)?
     }
 
     debug!("Configure file found at: {:?}", configure_file_path);
 
-    configure_file_path
+    Ok(configure_file_path)
 }
 
 fn get_configure_file_path() -> Result<PathBuf, ConfigureError> {
@@ -103,7 +102,7 @@ pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
 }
 
 pub fn read_configuration() -> Result<ConfigurationFile, ConfigureError> {
-    let configure_file_path = find_configure_file();
+    let configure_file_path = find_configure_file()?;
 
     let mut file = match File::open(&configure_file_path) {
         Ok(file) => file,
@@ -116,27 +115,31 @@ pub fn read_configuration() -> Result<ConfigurationFile, ConfigureError> {
         Err(_) => return Err(ConfigureError::ConfigureFileNotReadable),
     };
 
-    match serde_json::from_str(&file_contents) {
-        Ok(configuration) => return Ok(configuration),
-        Err(_) => return Err(ConfigureError::ConfigureFileNotValid),
-    }
+    ConfigurationFile::from_str(file_contents)
 }
 
-pub fn save_configuration(configuration: &ConfigurationFile) -> Result<(), Error> {
-    save_configuration_to(configuration, &find_configure_file())
+pub fn save_configuration(configuration: &ConfigurationFile) -> Result<(), ConfigureError> {
+    let configuration_file = find_configure_file()?;
+    save_configuration_to(configuration, &configuration_file)
 }
 
 fn save_configuration_to(
     configuration: &ConfigurationFile,
     configure_file: &PathBuf,
-) -> Result<(), Error> {
-    let serialized = serde_json::to_string_pretty(&configuration)?;
+) -> Result<(), ConfigureError> {
+    let serialized = configuration.to_string()?;
 
     debug!("Writing to: {:?}", configure_file);
 
-    let mut file = File::create(configure_file)?;
-    file.write_all(serialized.as_bytes())?;
-    Ok(())
+    let mut file = match File::create(configure_file) {
+        Ok(file) => file,
+        Err(_) => return Err(ConfigureError::ConfigureFileNotWritable),
+    };
+
+    match file.write_all(serialized.as_bytes()) {
+        Ok(_) => return Ok(()),
+        Err(_) => return Err(ConfigureError::ConfigureFileNotWritable),
+    }
 }
 
 pub fn generate_encryption_key_if_needed(
@@ -172,7 +175,7 @@ pub fn encryption_key_for_configuration(
 fn read_keys(source: &PathBuf) -> Result<HashMap<String, String>, ConfigureError> {
     let file = match File::open(&source) {
         Ok(file) => file,
-        Err(_) => return Err(ConfigureError::KeysFileCannotBeRead),
+        Err(_) => return Err(ConfigureError::KeysFileNotReadable),
     };
 
     let map: HashMap<String, String> = match serde_json::from_reader(file) {
@@ -184,8 +187,21 @@ fn read_keys(source: &PathBuf) -> Result<HashMap<String, String>, ConfigureError
 }
 
 fn save_keys(destination: &PathBuf, keys: &HashMap<String, String>) -> Result<(), ConfigureError> {
-    write_file_with_contents(destination, &serde_json::to_string_pretty(&keys).unwrap())?;
-    Ok(())
+
+    let json = match serde_json::to_string_pretty(&keys) {
+        Ok(json) => json,
+        Err(_) => return Err(ConfigureError::KeysDataIsNotValid)
+    };
+
+    let mut file = match File::create(destination) {
+        Ok(file) => file,
+        Err(_) => return Err(ConfigureError::KeysFileNotWritable),
+    };
+
+    match file.write_all(json.as_bytes()) {
+        Ok(_) => return Ok(()),
+        Err(_) => return Err(ConfigureError::KeysFileNotWritable),
+    }
 }
 
 pub fn decrypt_files_for_configuration(
@@ -330,13 +346,13 @@ mod tests {
     #[test]
     fn test_find_configure_file_creates_it_if_missing() {
         delete_configure_file();
-        find_configure_file();
-        assert!(get_configure_file_path().exists());
+        find_configure_file().unwrap();
+        assert!(get_configure_file_path().unwrap().exists());
     }
 
     fn delete_configure_file() {
-        if get_configure_file_path().exists() {
-            std::fs::remove_file(get_configure_file_path()).unwrap();
+        if get_configure_file_path().unwrap().exists() {
+            std::fs::remove_file(get_configure_file_path().unwrap()).unwrap();
         }
     }
 }

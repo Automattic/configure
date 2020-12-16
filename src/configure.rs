@@ -23,6 +23,18 @@ impl ConfigurationFile {
         self == &ConfigurationFile::default()
     }
 
+    pub fn from_str(string: String) -> Result<ConfigurationFile, ConfigureError> {
+        match serde_json::from_str(&string) {
+            Ok(configuration) => return Ok(configuration),
+            Err(_) => return Err(ConfigureError::ConfigureFileNotValid),
+        }
+    }
+
+    pub fn to_string(&self) -> Result<String, ConfigureError> {
+        let string = serde_json::to_string_pretty(&self).unwrap();
+        Ok(string)
+    }
+
     fn needs_project_name(&self) -> bool {
         self.project_name == ""
     }
@@ -65,6 +77,9 @@ pub enum ConfigureError {
     #[error("The .configure file is missing or could not be read")]
     ConfigureFileNotReadable,
 
+   #[error("The .configure file could not be written")]
+    ConfigureFileNotWritable,
+
     #[error("Unable to parse configuration file – the JSON is probably invalid")]
     ConfigureFileNotValid,
 
@@ -75,10 +90,16 @@ pub enum ConfigureError {
     EncryptedFileMissing,
 
     #[error("Unable to read keys.json file in your secrets repo")]
-    KeysFileCannotBeRead,
+    KeysFileNotReadable,
+
+    #[error("Unable to write keys.json file in your secrets repo")]
+    KeysFileNotWritable,
 
     #[error("keys.json file in your secrets repo is not valid – it might be invalid JSON, or it could be structured incorrectly")]
     KeysFileIsNotValid,
+
+    #[error("Attempted to save invalid keys.json data")]
+    KeysDataIsNotValid,
 
     #[error("That project key is not defined in keys.json")]
     MissingProjectKey,
