@@ -68,8 +68,8 @@ pub enum ConfigureError {
     #[error("Unable to read keys.json file in your secrets repo")]
     KeysFileCannotBeRead,
 
-    #[error("keys.json file in your secrets repo is not valid json")]
-    KeysFileIsNotValidJSON,
+    #[error("keys.json file in your secrets repo is not valid – it might be invalid JSON, or it could be structured incorrectly")]
+    KeysFileIsNotValid,
 
     #[error("That project key is not defined in keys.json")]
     MissingProjectKey,
@@ -227,7 +227,9 @@ pub fn update_configuration(
     //
     // Step 6 – Write out encrypted files as needed
     //
-    write_encrypted_files_for_configuration(&configuration)
+    let encryption_key =
+        encryption_key_for_configuration(&configuration).expect("Unable to find encryption key");
+    write_encrypted_files_for_configuration(&configuration, encryption_key)
         .expect("Unable to copy encrypted files");
 
     //
@@ -273,10 +275,8 @@ pub fn setup_configuration(mut configuration: ConfigurationFile) {
     save_configuration(&configuration).expect("Unable to save configure file");
 
     // Create a key in `keys.json` for the project if one doesn't already exist
-    if read_encryption_key(&configuration).unwrap() == None {
-        generate_encryption_key(&configuration)
-            .expect("Unable to automatically generate an encryption key for this project");
-    }
+    generate_encryption_key_if_needed(&configuration)
+        .expect("Unable to generate an encryption key for this project");
 }
 
 fn prompt_for_project_name_if_needed(mut configuration: ConfigurationFile) -> ConfigurationFile {

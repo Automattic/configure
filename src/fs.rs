@@ -1,9 +1,10 @@
-use crate::encryption::{decrypt_file, encrypt_file};
+use crate::encryption::{decrypt_file, encrypt_file, generate_key};
 use crate::ConfigurationFile;
 use crate::ConfigureError;
 use log::{debug, info};
 use ring::digest::{Context, SHA256};
-use serde_json::json;
+
+use std::collections::HashMap;
 use std::env;
 use std::fs::{create_dir_all, remove_file, rename, File};
 use std::io::{BufReader, Error, Read, Write};
@@ -64,6 +65,8 @@ pub fn find_project_root() -> PathBuf {
 }
 
 pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
+
+    // Allow developers to specify where they want the secrets repo to be located using an environment variable
     if let Ok(var) = env::var(crate::SECRETS_KEY_NAME) {
         let user_secrets_path = Path::new(&var);
 
@@ -73,7 +76,6 @@ pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
     }
 
     let home_dir = dirs::home_dir().expect("Unable to determine user home directory");
-
     let root_secrets_path = home_dir.join(".mobile-secrets");
 
     if root_secrets_path.exists() && root_secrets_path.is_dir() {
@@ -123,49 +125,52 @@ fn save_configuration_to(
     Ok(())
 }
 
-pub fn read_encryption_key(
+pub fn generate_encryption_key_if_needed(
     configuration: &ConfigurationFile,
-) -> Result<Option<String>, ConfigureError> {
+) -> Result<(), ConfigureError> {
+    if encryption_key_for_configuration(&configuration).is_ok() {
+        return Ok(());
+    }
+
+    let keys_file_path = find_keys_file()?;
+
+    let mut keys = read_keys(&keys_file_path)?;
+    keys.insert(configuration.project_name.to_string(), generate_key());
+
+    save_keys(&keys_file_path, &keys)
+}
+
+pub fn encryption_key_for_configuration(
+    configuration: &ConfigurationFile,
+) -> Result<String, ConfigureError> {
     let keys_file_path = find_keys_file()?;
 
     debug!("Reading keys from {:?}", keys_file_path);
 
-    let file = match File::open(keys_file_path) {
-        Ok(file) => file,
-        Err(_) => return Err(ConfigureError::KeysFileCannotBeRead),
-    };
+    let keys = read_keys(&keys_file_path)?;
 
-    let json: serde_json::Value = match serde_json::from_reader(file) {
-        Ok(json) => json,
-        Err(_) => return Err(ConfigureError::KeysFileIsNotValidJSON),
-    };
-
-    match json.get(&configuration.project_name) {
-        Some(key) => return Ok(Some(String::from(key.as_str().unwrap()))),
-        None => return Ok(None),
-    };
+    match keys.get(&configuration.project_name) {
+        Some(key) => Ok(key.to_string()),
+        None => return Err(ConfigureError::MissingProjectKey),
+    }
 }
 
-pub fn generate_encryption_key(configuration: &ConfigurationFile) -> Result<(), ConfigureError> {
-    let keys_file_path = find_keys_file()?;
-
-    let file = match File::open(&keys_file_path) {
+fn read_keys(source: &PathBuf) -> Result<HashMap<String, String>, ConfigureError> {
+    let file = match File::open(&source) {
         Ok(file) => file,
         Err(_) => return Err(ConfigureError::KeysFileCannotBeRead),
     };
 
-    let mut json: serde_json::Value = match serde_json::from_reader(file) {
-        Ok(json) => json,
-        Err(_) => return Err(ConfigureError::KeysFileIsNotValidJSON),
+    let map: HashMap<String, String> = match serde_json::from_reader(file) {
+        Ok(map) => map,
+        Err(_) => return Err(ConfigureError::KeysFileIsNotValid),
     };
 
-    json[&configuration.project_name] = json!("Foo!");
+    Ok(map)
+}
 
-    write_file_with_contents(
-        &keys_file_path,
-        &serde_json::to_string_pretty(&json).unwrap(),
-    )?;
-
+fn save_keys(destination: &PathBuf, keys: &HashMap<String, String>) -> Result<(), ConfigureError> {
+    write_file_with_contents(destination, &serde_json::to_string_pretty(&keys).unwrap())?;
     Ok(())
 }
 
@@ -173,13 +178,17 @@ pub fn decrypt_files_for_configuration(
     configuration: &ConfigurationFile,
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root();
-    let encryption_key = match read_encryption_key(configuration) {
-        Ok(key) => match key {
-            Some(value) => value,
-            None => return Err(ConfigureError::MissingProjectKey),
-        },
-        Err(err) => return Err(err),
-    };
+
+    let encryption_key;
+
+    // Allow defining an environment variable that can override the key selection (for use in CI, for example).
+    // This is placed here instead of in `read_encryption_key` because it isa security risk to allow this override for
+    // encryption – someone might set the encryption key on their local machine, causing every project to silently use the same key.
+    if let Ok(var) = env::var(crate::ENCRYPTION_KEY_NAME) {
+        encryption_key = var;
+    } else {
+        encryption_key = encryption_key_for_configuration(configuration)?;
+    }
 
     for file in &configuration.files_to_copy {
         let source = project_root.join(&file.get_encrypted_destination());
@@ -240,16 +249,10 @@ pub fn decrypt_files_for_configuration(
 
 pub fn write_encrypted_files_for_configuration(
     configuration: &ConfigurationFile,
+    encryption_key: String,
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root();
-    let secrets_root = find_secrets_repo().unwrap();
-    let encryption_key = match read_encryption_key(configuration) {
-        Ok(key) => match key {
-            Some(value) => value,
-            None => return Err(ConfigureError::MissingProjectKey),
-        },
-        Err(err) => return Err(err),
-    };
+    let secrets_root = find_secrets_repo()?;
 
     for file in &configuration.files_to_copy {
         let source = &secrets_root.join(&file.source);
