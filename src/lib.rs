@@ -12,7 +12,8 @@ use log::debug;
 ///
 pub fn init() {
     init_encryption();
-    let configuration = read_configuration();
+    let configuration = read_configuration()
+        .expect("Unable to read configuration from `.configure` file");
     setup_configuration(configuration);
 }
 
@@ -27,7 +28,8 @@ pub fn init() {
 ///
 pub fn apply(interactive: bool) {
     init_encryption();
-    let configuration = read_configuration();
+    let configuration = read_configuration()
+        .expect("Unable to read configuration from `.configure` file");
 
     if configuration.is_empty() {
         if interactive {
@@ -51,7 +53,8 @@ pub fn apply(interactive: bool) {
 ///
 pub fn update(interactive: bool) {
     init_encryption();
-    let configuration = read_configuration();
+    let configuration = read_configuration()
+        .expect("Unable to read configuration from `.configure` file");
 
     if configuration.is_empty() {
         if interactive {
@@ -68,7 +71,8 @@ pub fn update(interactive: bool) {
 ///
 pub fn validate() {
     init_encryption();
-    let configuration = read_configuration();
+    let configuration = read_configuration()
+        .expect("Unable to read configuration from `.configure` file");
 
     if configuration.is_empty() {
         ui::warn("Unable to validate configuration – it is empty");

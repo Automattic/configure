@@ -62,6 +62,12 @@ pub enum ConfigureError {
     #[error("Unable to find the root of the respository – are you sure you're running this inside a git repo?")]
     ProjectNotPresent,
 
+    #[error("The .configure file is missing or could not be read")]
+    ConfigureFileNotReadable,
+
+    #[error("Unable to parse configuration file – the JSON is probably invalid")]
+    ConfigureFileNotValid,
+
     #[error("No secrets repository could be found on this machine")]
     SecretsNotPresent,
 

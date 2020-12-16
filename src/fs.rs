@@ -101,18 +101,24 @@ pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
     Err(crate::configure::ConfigureError::SecretsNotPresent)
 }
 
-pub fn read_configuration() -> ConfigurationFile {
+pub fn read_configuration() -> Result<ConfigurationFile, ConfigureError> {
     let configure_file_path = find_configure_file();
-    let mut file = File::open(&configure_file_path).expect("Unable to open configuration file");
+
+    let mut file = match File::open(&configure_file_path) {
+        Ok(file) => file,
+        Err(_) => return Err(ConfigureError::ConfigureFileNotReadable),
+    };
 
     let mut file_contents = String::new();
-    file.read_to_string(&mut file_contents)
-        .expect("Unable to read configuration file");
+    match file.read_to_string(&mut file_contents) {
+        Ok(_) => assert!(true), // no-op
+        Err(_) => return Err(ConfigureError::ConfigureFileNotReadable),
+    };
 
-    let result: ConfigurationFile = serde_json::from_str(&file_contents)
-        .expect("Unable to parse configuration file – the JSON is probably invalid");
-
-    result
+    match serde_json::from_str(&file_contents) {
+        Ok(configuration) => return Ok(configuration),
+        Err(_) => return Err(ConfigureError::ConfigureFileNotValid),
+    }
 }
 
 pub fn save_configuration(configuration: &ConfigurationFile) -> Result<(), Error> {
