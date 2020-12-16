@@ -40,9 +40,15 @@ jobs:
           echo "Plugin Version: $PLUGIN_VERSION"
           echo "Tagged Version: $TAG_NAME"
 
-          if [ "$BINARY_VERSION" != "$PLUGIN_VERSION" ] || [ "$TAG_NAME" != "BINARY_VERSION" ]
+          if [ "$TAG_NAME" != "$PLUGIN_VERSION" ]
           then
-            echo "Binary version, plugin version, and tag name don't match. They must be the same before creating a new release. Please fix this issue, then re-tag."
+            echo "Tag name doesn't match Gradle Plugin version. They must be the same before creating a new release. Please fix this issue, then re-tag."
+            exit 1
+          fi
+
+          if [ "$TAG_NAME" != "$BINARY_VERSION" ]
+          then
+            echo "Tag name doesn't match `configure` binary version. They must be the same before creating a new release. Please fix this issue, then re-tag."
             exit 1
           fi
 
