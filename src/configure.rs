@@ -31,8 +31,10 @@ impl ConfigurationFile {
     }
 
     pub fn to_string(&self) -> Result<String, ConfigureError> {
-        let string = serde_json::to_string_pretty(&self).unwrap();
-        Ok(string)
+        match serde_json::to_string_pretty(&self) {
+            Ok(string) => return Ok(string),
+            Err(_) => return Err(ConfigureError::ConfigureDataNotValid)
+        }
     }
 
     fn needs_project_name(&self) -> bool {
@@ -83,6 +85,9 @@ pub enum ConfigureError {
     #[error("Unable to parse configuration file – the JSON is probably invalid")]
     ConfigureFileNotValid,
 
+    #[error("Unable to save an configuration data – it couldn't be converted to JSON")]
+    ConfigureDataNotValid,
+
     #[error("No secrets repository could be found on this machine")]
     SecretsNotPresent,
 
@@ -98,7 +103,7 @@ pub enum ConfigureError {
     #[error("keys.json file in your secrets repo is not valid – it might be invalid JSON, or it could be structured incorrectly")]
     KeysFileIsNotValid,
 
-    #[error("Attempted to save invalid keys.json data")]
+    #[error("Attempted to save invalid keys.json data – it couldn't be converted to JSON")]
     KeysDataIsNotValid,
 
     #[error("That project key is not defined in keys.json")]
