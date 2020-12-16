@@ -33,7 +33,7 @@ impl Configuration {
     pub fn to_string(&self) -> Result<String, ConfigureError> {
         match serde_json::to_string_pretty(&self) {
             Ok(string) => Ok(string),
-            Err(_) => Err(ConfigureError::ConfigureDataNotValid)
+            Err(_) => Err(ConfigureError::ConfigureDataNotValid),
         }
     }
 
@@ -79,7 +79,7 @@ pub enum ConfigureError {
     #[error("The .configure file is missing or could not be read")]
     ConfigureFileNotReadable,
 
-   #[error("The .configure file could not be written")]
+    #[error("The .configure file could not be written")]
     ConfigureFileNotWritable,
 
     #[error("Unable to parse configuration file – the JSON is probably invalid")]
@@ -131,17 +131,14 @@ impl File {
     }
 
     fn get_backup_destination_for_date(&self, date: DateTime<Utc>) -> PathBuf {
-
         let path = Path::new(&self.destination);
 
-        let directory = path
-            .parent()
-            .unwrap_or(Path::new("/")); // If we're at the root of the file system
+        let directory = path.parent().unwrap_or_else(|| Path::new("/")); // If we're at the root of the file system
 
         let file_stem = path
             .file_stem()
-            .unwrap_or_default()  // Ensure one exists
-            .to_str()             // Convert from OsStr
+            .unwrap_or_default() // Ensure one exists
+            .to_str() // Convert from OsStr
             .unwrap_or_default(); // Blank on failure
 
         let extension = path
@@ -150,9 +147,7 @@ impl File {
             .to_str()
             .unwrap_or_default();
 
-        let datetime = date
-            .format("%Y-%m-%d-%H-%M-%S")
-            .to_string();
+        let datetime = date.format("%Y-%m-%d-%H-%M-%S").to_string();
 
         let filename: String;
 
@@ -162,7 +157,7 @@ impl File {
             filename = format!("{:}-{:}.{:}.bak", file_stem, datetime, extension);
         }
 
-        return directory.join(filename)
+        directory.join(filename)
     }
 }
 
@@ -175,10 +170,7 @@ pub fn apply_configuration(configuration: &Configuration) {
     info!("Done")
 }
 
-pub fn update_configuration(
-    mut configuration: Configuration,
-    interactive: bool,
-) -> Configuration {
+pub fn update_configuration(mut configuration: Configuration, interactive: bool) -> Configuration {
     let starting_branch =
         get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
     let starting_ref =
@@ -499,32 +491,58 @@ mod tests {
 
     #[test]
     fn test_that_get_encrypted_destination_ends_in_enc_extension() {
-        let file = File { source: "".to_string(), destination: ".configure-files/file".to_string() };
-        assert_eq!(file.get_encrypted_destination(), ".configure-files/file.enc")
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file".to_string(),
+        };
+        assert_eq!(
+            file.get_encrypted_destination(),
+            ".configure-files/file.enc"
+        )
     }
 
     #[test]
     fn test_that_get_decrypted_destination_matches_starting_filename() {
-        let file = File { source: "".to_string(), destination: ".configure-files/file".to_string() };
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file".to_string(),
+        };
         assert_eq!(file.get_decrypted_destination(), ".configure-files/file")
     }
 
     #[test]
     fn test_that_get_backup_destination_has_bak_extension() {
-        let file = File { source: "".to_string(), destination: ".configure-files/file".to_string() };
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file".to_string(),
+        };
         assert_eq!(file.get_backup_destination().extension().unwrap(), "bak")
     }
 
     #[test]
     fn test_that_get_backup_destination_works_for_files_in_filesystem_root() {
-        let file = File { source: "".to_string(), destination: "/.configure-files/file.txt".to_string() };
-        assert_eq!(file.get_backup_destination_for_date(get_zero_date()).to_str(), Some("/.configure-files/file-1970-01-01-00-00-00.txt.bak"))
+        let file = File {
+            source: "".to_string(),
+            destination: "/.configure-files/file.txt".to_string(),
+        };
+        assert_eq!(
+            file.get_backup_destination_for_date(get_zero_date())
+                .to_str(),
+            Some("/.configure-files/file-1970-01-01-00-00-00.txt.bak")
+        )
     }
 
     #[test]
     fn test_that_get_backup_destination_works_for_files_without_extension() {
-        let file = File { source: "".to_string(), destination: ".configure-files/file".to_string() };
-        assert_eq!(file.get_backup_destination_for_date(get_zero_date()).to_str(), Some(".configure-files/file-1970-01-01-00-00-00.bak"))
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file".to_string(),
+        };
+        assert_eq!(
+            file.get_backup_destination_for_date(get_zero_date())
+                .to_str(),
+            Some(".configure-files/file-1970-01-01-00-00-00.bak")
+        )
     }
 
     fn get_zero_date() -> DateTime<Utc> {

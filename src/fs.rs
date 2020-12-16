@@ -58,21 +58,20 @@ pub fn find_project_root() -> Result<PathBuf, ConfigureError> {
 
     let repo = match git2::Repository::discover(&path) {
         Ok(repo) => repo,
-        Err(_) => return Err(ConfigureError::ProjectNotPresent)
+        Err(_) => return Err(ConfigureError::ProjectNotPresent),
     };
 
     debug!("Discovered Repository at {:?}", &path);
 
     let project_root = match repo.workdir() {
         Some(dir) => dir,
-        None => return Err(ConfigureError::ProjectNotPresent)
+        None => return Err(ConfigureError::ProjectNotPresent),
     };
 
     Ok(project_root.to_path_buf())
 }
 
 pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
-
     // Allow developers to specify where they want the secrets repo to be located using an environment variable
     if let Ok(var) = env::var(crate::SECRETS_KEY_NAME) {
         let user_secrets_path = Path::new(&var);
@@ -187,10 +186,9 @@ fn read_keys(source: &PathBuf) -> Result<HashMap<String, String>, ConfigureError
 }
 
 fn save_keys(destination: &PathBuf, keys: &HashMap<String, String>) -> Result<(), ConfigureError> {
-
     let json = match serde_json::to_string_pretty(&keys) {
         Ok(json) => json,
-        Err(_) => return Err(ConfigureError::KeysDataIsNotValid)
+        Err(_) => return Err(ConfigureError::KeysDataIsNotValid),
     };
 
     let mut file = match File::create(destination) {
@@ -349,7 +347,10 @@ mod tests {
 
     #[test]
     fn test_get_configure_file_path_contains_configure_file() {
-        assert_eq!(get_configure_file_path().unwrap().file_name(), Some(OsStr::new(".configure"))) ;
+        assert_eq!(
+            get_configure_file_path().unwrap().file_name(),
+            Some(OsStr::new(".configure"))
+        );
     }
 
     #[test]
