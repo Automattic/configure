@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "configure"
-version = "0.1.0"
+version = "0.1.10"
 dependencies = [
  "base64 0.13.0",
  "chrono",

@@ -11,6 +11,20 @@ jobs:
     outputs:
       uploadurl: ${{ steps.create_release.outputs.upload_url }}
     steps:
+      - uses: actions/checkout@v2
+      - name: Validate Build Products
+        run: |
+          # Ensure that the binary and the plugin versions are in sync before continuing
+          BINARY_VERSION=$(cargo build && ./target/debug/configure --version | sed "s/configure//" )
+          PLUGIN_VERSION=$(cd gradle-plugin && ./gradlew -q printVersion)
+
+          echo "Binary Version: $BINARY_VERSION"
+          echo "Plugin Version: $PLUGIN_VERSION"
+
+          if [ "$BINARY_VERSION" != "$PLUGIN_VERSION" ]
+          then
+            exit 1
+          fi
       - name: Create Release
         id: create_release
         uses: actions/create-release@latest
@@ -109,3 +123,19 @@ jobs:
           asset_path: configure-linux.zip
           asset_name: configure-linux.zip
           asset_content_type: application/zip
+  # Publish Gradle Plugin
+  publish:
+    runs-on: ubuntu-latest
+    needs: [windows,linux,mac]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Release
+        run: |
+          cd gradle-plugin
+          ./gradlew bintrayUpload
+        env:
+          BINTRAY_USER: ${{ secrets.BINTRAY_USER }}
+          BINTRAY_KEY: ${{ secrets.BINTRAY_KEY }}
+
+
+
