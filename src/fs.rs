@@ -111,7 +111,7 @@ pub fn read_configuration() -> Result<Configuration, ConfigureError> {
 
     let mut file_contents = String::new();
     match file.read_to_string(&mut file_contents) {
-        Ok(_) => assert!(true), // no-op
+        Ok(_) => (), // no-op
         Err(_) => return Err(ConfigureError::ConfigureFileNotReadable),
     };
 
@@ -137,8 +137,8 @@ fn write_configuration_to(
     };
 
     match file.write_all(serialized.as_bytes()) {
-        Ok(_) => return Ok(()),
-        Err(_) => return Err(ConfigureError::ConfigureFileNotWritable),
+        Ok(_) => Ok(()),
+        Err(_) => Err(ConfigureError::ConfigureFileNotWritable),
     }
 }
 
@@ -168,7 +168,7 @@ pub fn encryption_key_for_configuration(
 
     match keys.get(&configuration.project_name) {
         Some(key) => Ok(key.to_string()),
-        None => return Err(ConfigureError::MissingProjectKey),
+        None => Err(ConfigureError::MissingProjectKey),
     }
 }
 
@@ -199,8 +199,8 @@ fn save_keys(destination: &PathBuf, keys: &HashMap<String, String>) -> Result<()
     };
 
     match file.write_all(json.as_bytes()) {
-        Ok(_) => return Ok(()),
-        Err(_) => return Err(ConfigureError::KeysFileNotWritable),
+        Ok(_) => Ok(()),
+        Err(_) => Err(ConfigureError::KeysFileNotWritable),
     }
 }
 

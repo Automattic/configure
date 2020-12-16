@@ -25,15 +25,15 @@ impl Configuration {
 
     pub fn from_str(string: String) -> Result<Configuration, ConfigureError> {
         match serde_json::from_str(&string) {
-            Ok(configuration) => return Ok(configuration),
-            Err(_) => return Err(ConfigureError::ConfigureFileNotValid),
+            Ok(configuration) => Ok(configuration),
+            Err(_) => Err(ConfigureError::ConfigureFileNotValid),
         }
     }
 
     pub fn to_string(&self) -> Result<String, ConfigureError> {
         match serde_json::to_string_pretty(&self) {
-            Ok(string) => return Ok(string),
-            Err(_) => return Err(ConfigureError::ConfigureDataNotValid)
+            Ok(string) => Ok(string),
+            Err(_) => Err(ConfigureError::ConfigureDataNotValid)
         }
     }
 
@@ -138,7 +138,7 @@ impl File {
         let datetime = Local::now().format("%Y-%m-%d-%H-%M-%S").to_string();
         let extension = path
             .extension()
-            .unwrap_or(std::ffi::OsStr::new(""))
+            .unwrap_or_default()
             .to_str()
             .unwrap_or("");
 
