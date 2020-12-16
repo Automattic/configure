@@ -19,9 +19,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Ensure cargo.lock file is in sync
+      run: cargo --locked
     - name: Build
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
     - name: Lint
-      run: cargo clippy
+      run: cargo clippy && cargo fmt

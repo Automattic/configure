@@ -7,20 +7,34 @@ use indicatif::ProgressBar;
 use console::style;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
-
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct ConfigurationFile {
+pub struct Configuration {
     pub project_name: String,
     pub branch: String,
     pub pinned_hash: String,
     pub files_to_copy: Vec<File>,
 }
 
-impl ConfigurationFile {
+impl Configuration {
     pub fn is_empty(&self) -> bool {
-        self == &ConfigurationFile::default()
+        self == &Configuration::default()
+    }
+
+    pub fn from_str(string: String) -> Result<Configuration, ConfigureError> {
+        match serde_json::from_str(&string) {
+            Ok(configuration) => Ok(configuration),
+            Err(_) => Err(ConfigureError::ConfigureFileNotValid),
+        }
+    }
+
+    pub fn to_string(&self) -> Result<String, ConfigureError> {
+        match serde_json::to_string_pretty(&self) {
+            Ok(string) => Ok(string),
+            Err(_) => Err(ConfigureError::ConfigureDataNotValid),
+        }
     }
 
     fn needs_project_name(&self) -> bool {
@@ -36,10 +50,10 @@ impl ConfigurationFile {
     }
 }
 
-impl Default for ConfigurationFile {
+impl Default for Configuration {
     fn default() -> Self {
         let files_to_copy: Vec<File> = Vec::new();
-        ConfigurationFile {
+        Configuration {
             project_name: "".to_string(),
             branch: "".to_string(),
             pinned_hash: "".to_string(),
@@ -59,6 +73,21 @@ pub enum ConfigureError {
     #[error("Invalid git status")]
     GitStatusUnknownError,
 
+    #[error("Unable to find the root of the respository – are you sure you're running this inside a git repo?")]
+    ProjectNotPresent,
+
+    #[error("The .configure file is missing or could not be read")]
+    ConfigureFileNotReadable,
+
+    #[error("The .configure file could not be written")]
+    ConfigureFileNotWritable,
+
+    #[error("Unable to parse configuration file – the JSON is probably invalid")]
+    ConfigureFileNotValid,
+
+    #[error("Unable to save an configuration data – it couldn't be converted to JSON")]
+    ConfigureDataNotValid,
+
     #[error("No secrets repository could be found on this machine")]
     SecretsNotPresent,
 
@@ -66,10 +95,16 @@ pub enum ConfigureError {
     EncryptedFileMissing,
 
     #[error("Unable to read keys.json file in your secrets repo")]
-    KeysFileCannotBeRead,
+    KeysFileNotReadable,
 
-    #[error("keys.json file in your secrets repo is not valid json")]
-    KeysFileIsNotValidJSON,
+    #[error("Unable to write keys.json file in your secrets repo")]
+    KeysFileNotWritable,
+
+    #[error("keys.json file in your secrets repo is not valid – it might be invalid JSON, or it could be structured incorrectly")]
+    KeysFileIsNotValid,
+
+    #[error("Attempted to save invalid keys.json data – it couldn't be converted to JSON")]
+    KeysDataIsNotValid,
 
     #[error("That project key is not defined in keys.json")]
     MissingProjectKey,
@@ -91,29 +126,42 @@ impl File {
         self.destination.clone()
     }
 
-    pub fn get_backup_destination(&self) -> String {
-        let path = std::path::Path::new(&self.destination);
+    pub fn get_backup_destination(&self) -> PathBuf {
+        self.get_backup_destination_for_date(Utc::now())
+    }
 
-        let directory = match path.parent() {
-            Some(parent) => parent,
-            None => std::path::Path::new("/"),
-        };
+    fn get_backup_destination_for_date(&self, date: DateTime<Utc>) -> PathBuf {
+        let path = Path::new(&self.destination);
 
-        let file_stem = path.file_stem().unwrap().to_str().unwrap_or("");
-        let datetime = Local::now().format("%Y-%m-%d-%H-%M-%S").to_string();
+        let directory = path.parent().unwrap_or_else(|| Path::new("/")); // If we're at the root of the file system
+
+        let file_stem = path
+            .file_stem()
+            .unwrap_or_default() // Ensure one exists
+            .to_str() // Convert from OsStr
+            .unwrap_or_default(); // Blank on failure
+
         let extension = path
             .extension()
-            .unwrap_or(std::ffi::OsStr::new(""))
+            .unwrap_or_default()
             .to_str()
-            .unwrap_or("");
+            .unwrap_or_default();
 
-        let filename = format!("{:}-{:}.{:}.bak", file_stem, datetime, extension);
+        let datetime = date.format("%Y-%m-%d-%H-%M-%S").to_string();
 
-        return directory.join(filename).to_str().unwrap().to_string();
+        let filename: String;
+
+        if extension.is_empty() {
+            filename = format!("{:}-{:}.bak", file_stem, datetime);
+        } else {
+            filename = format!("{:}-{:}.{:}.bak", file_stem, datetime, extension);
+        }
+
+        directory.join(filename)
     }
 }
 
-pub fn apply_configuration(configuration: &ConfigurationFile) {
+pub fn apply_configuration(configuration: &Configuration) {
     // Decrypt the project's configuration files
     decrypt_files_for_configuration(&configuration).expect("Unable to decrypt and copy files");
 
@@ -122,10 +170,7 @@ pub fn apply_configuration(configuration: &ConfigurationFile) {
     info!("Done")
 }
 
-pub fn update_configuration(
-    mut configuration: ConfigurationFile,
-    interactive: bool,
-) -> ConfigurationFile {
+pub fn update_configuration(mut configuration: Configuration, interactive: bool) -> Configuration {
     let starting_branch =
         get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
     let starting_ref =
@@ -222,12 +267,14 @@ pub fn update_configuration(
     //
     // Step 5 – Write out encrypted files as needed
     //
-    save_configuration(&configuration).expect("Unable to save updated configuration");
+    write_configuration(&configuration).expect("Unable to save updated configuration");
 
     //
     // Step 6 – Write out encrypted files as needed
     //
-    write_encrypted_files_for_configuration(&configuration)
+    let encryption_key =
+        encryption_key_for_configuration(&configuration).expect("Unable to find encryption key");
+    write_encrypted_files_for_configuration(&configuration, encryption_key)
         .expect("Unable to copy encrypted files");
 
     //
@@ -247,11 +294,11 @@ pub fn update_configuration(
     configuration
 }
 
-pub fn validate_configuration(configuration: ConfigurationFile) {
+pub fn validate_configuration(configuration: Configuration) {
     println!("{:?}", configuration);
 }
 
-pub fn setup_configuration(mut configuration: ConfigurationFile) {
+pub fn setup_configuration(mut configuration: Configuration) {
     heading("Configure Setup");
     println!("Let's get configuration set up for this project.");
     newline();
@@ -270,16 +317,14 @@ pub fn setup_configuration(mut configuration: ConfigurationFile) {
 
     info!("Writing changes to .configure");
 
-    save_configuration(&configuration).expect("Unable to save configure file");
+    write_configuration(&configuration).expect("Unable to save configure file");
 
     // Create a key in `keys.json` for the project if one doesn't already exist
-    if read_encryption_key(&configuration).unwrap() == None {
-        generate_encryption_key(&configuration)
-            .expect("Unable to automatically generate an encryption key for this project");
-    }
+    generate_encryption_key_if_needed(&configuration)
+        .expect("Unable to generate an encryption key for this project");
 }
 
-fn prompt_for_project_name_if_needed(mut configuration: ConfigurationFile) -> ConfigurationFile {
+fn prompt_for_project_name_if_needed(mut configuration: Configuration) -> Configuration {
     // If there's already a project name, don't bother updating it
     if !configuration.needs_project_name() {
         return configuration;
@@ -292,7 +337,7 @@ fn prompt_for_project_name_if_needed(mut configuration: ConfigurationFile) -> Co
     configuration
 }
 
-fn prompt_for_branch(mut configuration: ConfigurationFile, force: bool) -> ConfigurationFile {
+fn prompt_for_branch(mut configuration: Configuration, force: bool) -> Configuration {
     // If there's already a branch set, don't bother updating it
     if !configuration.needs_branch() && !force {
         return configuration;
@@ -320,7 +365,7 @@ fn prompt_for_branch(mut configuration: ConfigurationFile, force: bool) -> Confi
     configuration
 }
 
-fn set_latest_hash_if_needed(mut configuration: ConfigurationFile) -> ConfigurationFile {
+fn set_latest_hash_if_needed(mut configuration: Configuration) -> Configuration {
     if !configuration.needs_pinned_hash() {
         return configuration;
     }
@@ -332,7 +377,7 @@ fn set_latest_hash_if_needed(mut configuration: ConfigurationFile) -> Configurat
     configuration
 }
 
-fn prompt_to_add_files(mut configuration: ConfigurationFile) -> ConfigurationFile {
+fn prompt_to_add_files(mut configuration: Configuration) -> Configuration {
     let mut files = configuration.files_to_copy;
 
     let mut message = "Would you like to add files?";
@@ -372,7 +417,7 @@ fn prompt_to_add_file() -> Option<File> {
     let relative_destination_file_path =
         prompt("Enter the destination file path (relative to the project root):");
 
-    let project_root = find_project_root();
+    let project_root = find_project_root().unwrap();
     let full_destination_file_path = project_root.join(&relative_destination_file_path);
 
     debug!("Destination: {:?}", full_destination_file_path);
@@ -384,7 +429,7 @@ fn prompt_to_add_file() -> Option<File> {
 }
 
 fn configure_file_distance_behind_secrets_repo(
-    configuration: &ConfigurationFile,
+    configuration: &Configuration,
     branch_name: &str,
 ) -> i32 {
     debug!("Checking if configure file is behind secrets repo");
@@ -412,9 +457,95 @@ fn configure_file_distance_behind_secrets_repo(
 #[cfg(test)]
 mod tests {
     // Import the parent scope
-    //use super::*;
-    //use crate::SECRETS_KEY_NAME;
+    use super::*;
 
+    #[test]
+    fn test_that_default_configuration_needs_project_name() {
+        assert!(Configuration::default().needs_project_name())
+    }
+
+    #[test]
+    fn test_that_default_configuration_needs_branch() {
+        assert!(Configuration::default().needs_branch())
+    }
+
+    #[test]
+    fn test_that_default_configuration_needs_pinned_hash() {
+        assert!(Configuration::default().needs_pinned_hash())
+    }
+
+    #[test]
+    fn test_that_invalid_configuration_cannot_be_deseralized() {
+        assert!(Configuration::from_str("".to_string()).is_err())
+    }
+
+    #[test]
+    fn test_that_default_configuration_can_be_serialized() {
+        assert!(Configuration::default().to_string().is_ok())
+    }
+
+    #[test]
+    fn test_that_default_configuration_is_empty() {
+        assert!(Configuration::default().is_empty())
+    }
+
+    #[test]
+    fn test_that_get_encrypted_destination_ends_in_enc_extension() {
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file".to_string(),
+        };
+        assert_eq!(
+            file.get_encrypted_destination(),
+            ".configure-files/file.enc"
+        )
+    }
+
+    #[test]
+    fn test_that_get_decrypted_destination_matches_starting_filename() {
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file".to_string(),
+        };
+        assert_eq!(file.get_decrypted_destination(), ".configure-files/file")
+    }
+
+    #[test]
+    fn test_that_get_backup_destination_has_bak_extension() {
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file".to_string(),
+        };
+        assert_eq!(file.get_backup_destination().extension().unwrap(), "bak")
+    }
+
+    #[test]
+    fn test_that_get_backup_destination_works_for_files_in_filesystem_root() {
+        let file = File {
+            source: "".to_string(),
+            destination: "/.configure-files/file.txt".to_string(),
+        };
+        assert_eq!(
+            file.get_backup_destination_for_date(get_zero_date()),
+            Path::new("/.configure-files").join("file-1970-01-01-00-00-00.txt.bak")
+        )
+    }
+
+    #[test]
+    fn test_that_get_backup_destination_works_for_files_without_extension() {
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file".to_string(),
+        };
+        assert_eq!(
+            file.get_backup_destination_for_date(get_zero_date()),
+            Path::new(".configure-files").join("file-1970-01-01-00-00-00.bak")
+        )
+    }
+
+    fn get_zero_date() -> DateTime<Utc> {
+        Utc.timestamp(0, 0)
+    }
     // #[test]
     // fn test_that_pinned_hash_is_updated_when_running_update_on_empty_file() {
     //     use_test_keys();
