@@ -447,8 +447,38 @@ fn configure_file_distance_behind_secrets_repo(
 #[cfg(test)]
 mod tests {
     // Import the parent scope
-    //use super::*;
+    use super::*;
     //use crate::SECRETS_KEY_NAME;
+
+    #[test]
+    fn test_that_default_configuration_needs_project_name() {
+        assert!(Configuration::default().needs_project_name())
+    }
+
+    #[test]
+    fn test_that_default_configuration_needs_branch() {
+        assert!(Configuration::default().needs_branch())
+    }
+
+    #[test]
+    fn test_that_default_configuration_needs_pinned_hash() {
+        assert!(Configuration::default().needs_pinned_hash())
+    }
+
+    #[test]
+    fn test_that_invalid_configuration_cannot_be_deseralized() {
+        assert!(Configuration::from_str("".to_string()).is_err())
+    }
+
+    #[test]
+    fn test_that_default_configuration_can_be_serialized() {
+        assert!(Configuration::default().to_string().is_ok())
+    }
+
+    #[test]
+    fn test_that_default_configuration_is_empty() {
+        assert!(Configuration::default().is_empty())
+    }
 
     // #[test]
     // fn test_that_pinned_hash_is_updated_when_running_update_on_empty_file() {
