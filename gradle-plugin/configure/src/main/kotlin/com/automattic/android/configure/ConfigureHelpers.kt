@@ -1,12 +1,10 @@
 package com.automattic.android.configure
 
-import org.gradle.internal.impldep.com.amazonaws.event.SDKProgressPublisher.publishProgress
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLConnection
 import java.nio.file.Path
 import java.nio.file.Paths
 
@@ -21,9 +19,13 @@ object ConfigureHelpers {
 
     val pluginUrl: URL
         get() {
-            var os = ConfigureHelpers.osType.platform
+            val os = ConfigureHelpers.osType.platform
             println("Detected current OS: $os")
-            return URL("https://github.com/Automattic/configure/releases/download/$pluginVersion/configure-$os.zip")
+
+            val version = PLUGIN_VERSION
+            println("Detected plugin version: $version")
+
+            return URL("https://github.com/Automattic/configure/releases/download/$version/configure-$os.zip")
         }
 
     private enum class OS(val platform: String) {
@@ -47,8 +49,6 @@ object ConfigureHelpers {
 
             return OS.UNKNOWN
         }
-
-    val pluginVersion: String = "0.1.0" // TODO
 
     fun downloadFile(url: URL, destination: Path) {
         val connection = url.openConnection() as HttpURLConnection
