@@ -257,7 +257,7 @@ pub fn update_configuration(
     //
     // Step 5 – Write out encrypted files as needed
     //
-    save_configuration(&configuration).expect("Unable to save updated configuration");
+    write_configuration(&configuration).expect("Unable to save updated configuration");
 
     //
     // Step 6 – Write out encrypted files as needed
@@ -307,7 +307,7 @@ pub fn setup_configuration(mut configuration: ConfigurationFile) {
 
     info!("Writing changes to .configure");
 
-    save_configuration(&configuration).expect("Unable to save configure file");
+    write_configuration(&configuration).expect("Unable to save configure file");
 
     // Create a key in `keys.json` for the project if one doesn't already exist
     generate_encryption_key_if_needed(&configuration)

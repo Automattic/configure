@@ -21,7 +21,7 @@ pub fn find_configure_file() -> Result<PathBuf, ConfigureError> {
             configure_file_path
         );
 
-        save_configuration_to(&ConfigurationFile::default(), &configure_file_path)?
+        write_configuration_to(&ConfigurationFile::default(), &configure_file_path)?
     }
 
     debug!("Configure file found at: {:?}", configure_file_path);
@@ -45,9 +45,9 @@ pub fn find_keys_file() -> Result<PathBuf, ConfigureError> {
             "No keys file found at: {:?}. Creating one for you",
             keys_file_path
         );
-        write_file_with_contents(&keys_file_path, "{}").expect(
-            "There is no `keys.json` file in your secrets repository, and creating one failed",
-        );
+
+        let empty_keys: HashMap<String, String> = Default::default();
+        save_keys(&keys_file_path, &empty_keys)?;
     }
 
     Ok(keys_file_path)
@@ -118,12 +118,12 @@ pub fn read_configuration() -> Result<ConfigurationFile, ConfigureError> {
     ConfigurationFile::from_str(file_contents)
 }
 
-pub fn save_configuration(configuration: &ConfigurationFile) -> Result<(), ConfigureError> {
+pub fn write_configuration(configuration: &ConfigurationFile) -> Result<(), ConfigureError> {
     let configuration_file = find_configure_file()?;
-    save_configuration_to(configuration, &configuration_file)
+    write_configuration_to(configuration, &configuration_file)
 }
 
-fn save_configuration_to(
+fn write_configuration_to(
     configuration: &ConfigurationFile,
     configure_file: &PathBuf,
 ) -> Result<(), ConfigureError> {
@@ -302,13 +302,6 @@ pub fn write_encrypted_files_for_configuration(
     Ok(())
 }
 
-/// Helper method to create an empty file
-fn write_file_with_contents(path: &PathBuf, contents: &str) -> Result<(), std::io::Error> {
-    let mut file = File::create(path)?;
-    file.write_all(contents.as_bytes())?;
-    Ok(())
-}
-
 /// Returns the SHA-256 hash of a file at the given path
 fn hash_file(path: &PathBuf) -> Result<String, Error> {
     let input = File::open(path)?;
@@ -342,6 +335,22 @@ fn create_parent_directory_for_path_if_not_exists(path: &PathBuf) -> Result<(), 
 mod tests {
     // Import the parent scope
     use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn test_find_project_root() {
+        assert!(find_project_root().unwrap().exists());
+    }
+
+    #[test]
+    fn test_get_configure_file_path_file_name_is_always_present() {
+        assert!(get_configure_file_path().unwrap().file_name().is_some());
+    }
+
+    #[test]
+    fn test_get_configure_file_path_contains_configure_file() {
+        assert_eq!(get_configure_file_path().unwrap().file_name(), Some(OsStr::new(".configure"))) ;
+    }
 
     #[test]
     fn test_find_configure_file_creates_it_if_missing() {
