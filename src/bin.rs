@@ -67,13 +67,17 @@ enum Command {
 pub fn main() {
     let options = Options::from_args();
 
-    CombinedLogger::init(vec![TermLogger::new(
+    match TermLogger::new(
         options.verbose.get_with_default(LevelFilter::Info),
         Config::default(),
         TerminalMode::Mixed,
-    )
-    .unwrap()])
-    .unwrap();
+    ) {
+        Some(logger) => {
+            CombinedLogger::init(vec![logger]).unwrap_or_default();
+        }
+
+        None => println!("Unable to initialize logging"),
+    }
 
     debug!("libconfigure initialized");
 
