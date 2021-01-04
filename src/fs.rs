@@ -101,7 +101,20 @@ pub fn find_secrets_repo() -> Result<PathBuf, ConfigureError> {
 }
 
 pub fn read_configuration() -> Result<Configuration, ConfigureError> {
-    let configure_file_path = find_configure_file()?;
+    read_configuration_from_file(None)
+}
+
+pub fn read_configuration_from_file(
+    configure_file_path: Option<String>,
+) -> Result<Configuration, ConfigureError> {
+    let configure_file_path = match configure_file_path {
+        Some(path) => PathBuf::from(path),
+        None => find_configure_file()?,
+    };
+
+    if !configure_file_path.is_file() {
+        return Err(ConfigureError::ConfigureFileNotReadable);
+    }
 
     let mut file = match File::open(&configure_file_path) {
         Ok(file) => file,

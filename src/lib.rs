@@ -48,19 +48,19 @@ pub fn apply(interactive: bool) {
 ///
 /// # Arguments
 ///
-/// * `configuration` - The project's parsed `ConfigurationFile` object.
 /// * `interactive` - Whether to prompt the user for confirmation before performing destructive operations
+/// * `configuration_file_path` - An optional path to the configuration file that should be updated. Useful for when the working directory differs from the root project directory (as when using the gradle plugin, for instance). If this value is `None`, the default configuration file path will be used.
 ///
-pub fn update(interactive: bool) {
+pub fn update(interactive: bool, configuration_file_path: Option<String>) {
     init_encryption();
-    let configuration =
-        read_configuration().expect("Unable to read configuration from `.configure` file");
+    let configuration = read_configuration_from_file(configuration_file_path)
+        .expect("Unable to read configuration from `.configure` file");
 
     if configuration.is_empty() {
         if interactive {
             setup_configuration(configuration)
         } else {
-            ui::warn("Unable to update configuration – not running in interactive mode");
+            ui::warn("Current configuration is empty – unable to update when running in non-interactive mode");
         }
     } else {
         update_configuration(configuration, interactive);
@@ -72,8 +72,9 @@ pub fn update(interactive: bool) {
 /// # Arguments
 ///
 /// * `project_name` – the new project name that should be written to the `.configure` file.
-pub fn update_project_name(project_name: String) {
-    let mut configuration = read_configuration().expect("Unable to read project configuration");
+pub fn update_project_name(project_name: String, configuration_file_path: Option<String>) {
+    let mut configuration = read_configuration_from_file(configuration_file_path)
+        .expect("Unable to read project configuration");
     configuration.project_name = project_name;
     write_configuration(&configuration).expect("Unable to save project configuration");
 }
@@ -82,9 +83,10 @@ pub fn update_project_name(project_name: String) {
 ///
 /// # Arguments
 ///
-/// * `branch_name` – the new branch name that should be written to the `configure` file
-pub fn update_branch_name(branch_name: String) {
-    let mut configuration = read_configuration().expect("Unable to read project configuration");
+/// * `branch_name` – the new branch name read_configurationthat should be written to the `configure` file
+pub fn update_branch_name(branch_name: String, configuration_file_path: Option<String>) {
+    let mut configuration = read_configuration_from_file(configuration_file_path)
+        .expect("Unable to read project configuration");
     configuration.branch = branch_name;
     write_configuration(&configuration).expect("Unable to save project configuration");
 }
@@ -94,8 +96,9 @@ pub fn update_branch_name(branch_name: String) {
 /// # Arguments
 ///
 /// * `pinned_hash` – the commit hash to copy configuration files from
-pub fn update_pinned_hash(pinned_hash: String) {
-    let mut configuration = read_configuration().expect("Unable to read project configuration");
+pub fn update_pinned_hash(pinned_hash: String, configuration_file_path: Option<String>) {
+    let mut configuration = read_configuration_from_file(configuration_file_path)
+        .expect("Unable to read project configuration");
     configuration.pinned_hash = pinned_hash;
     write_configuration(&configuration).expect("Unable to save project configuration");
 }
