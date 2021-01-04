@@ -23,7 +23,7 @@ pub fn init() {
 ///
 /// # Arguments
 ///
-/// * `configuration` - The project's parsed `ConfigurationFile` object.'
+/// * `configuration` - The project's parsed `ConfigurationFile` object.
 /// * `interactive` - Whether to prompt the user for confirmation before performing destructive operations
 ///
 pub fn apply(interactive: bool) {
@@ -116,6 +116,7 @@ pub fn validate() {
 
 /// Create an encryption key suitable for use with this project
 ///
+/// The encryption key will be written to the `keys.json` file at the root of your local secrets repository. You will need to commit this change yourself.
 pub fn generate_encryption_key() -> String {
     crate::encryption::generate_key()
 }

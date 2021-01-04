@@ -213,7 +213,10 @@ pub fn decrypt_files_for_configuration(
     // This is placed here instead of in `read_encryption_key` because it isa security risk to allow this override for
     // encryption – someone might set the encryption key on their local machine, causing every project to silently use the same key.
     if let Ok(var) = env::var(crate::ENCRYPTION_KEY_NAME) {
-        println!("Found an environment variable named {:}. Using its value as the encryption key", crate::ENCRYPTION_KEY_NAME);
+        println!(
+            "Found an environment variable named {:}. Using its value as the encryption key",
+            crate::ENCRYPTION_KEY_NAME
+        );
         encryption_key = var;
     } else {
         encryption_key = encryption_key_for_configuration(configuration)?;
