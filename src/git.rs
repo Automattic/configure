@@ -230,10 +230,6 @@ pub fn fetch_secrets_latest_remote_data() -> Result<(), std::io::Error> {
 
 // Fetches the latest hash on the specified branch
 //
-pub fn check_out_branch_at_revision(branch_name: &str, hash: &str) -> Result<(), ConfigureError> {
-    SecretsRepo::default().switch_to_branch_at_revision(branch_name, hash)
-}
-
 // Returns the number of commits between two hashes. If the hashes aren't part of the same history
 // or if `hash2` comes before `hash1`, the result will be `0`
 pub fn secrets_repo_distance_between(hash1: &str, hash2: &str) -> Result<i32, ConfigureError> {

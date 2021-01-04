@@ -271,7 +271,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
                 &configuration.branch, latest_commit_hash
             );
 
-            check_out_branch_at_revision(&configuration.branch, &latest_commit_hash)
+            secrets_repo.switch_to_branch_at_revision(&configuration.branch, &latest_commit_hash)
                 .expect("Unable to check out branch at revision");
 
             // Update the pinned hash in `.configure` file before continuing
@@ -298,7 +298,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     //
     // Step 7 – Roll the secrets repo back to how it was before we started
     //
-    crate::git::check_out_branch_at_revision(&starting_branch, &starting_ref)
+    secrets_repo.switch_to_branch_at_revision(&starting_branch, &starting_ref)
         .expect("Unable to roll back to branch");
 
     //
@@ -472,7 +472,7 @@ fn configure_file_distance_behind_secrets_repo(
     debug!("Distance between {:} and {:} is {:}", configuration.pinned_hash, latest_hash, distance);
 
     // Put things back how we found them
-    crate::git::check_out_branch_at_revision(&current_branch, &current_hash)
+    repo.switch_to_branch_at_revision(&current_branch, &current_hash)
         .expect("Unable to roll back to branch");
 
     distance
