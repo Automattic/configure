@@ -148,6 +148,8 @@ impl SecretsRepo {
         Ok(branch_names)
     }
 
+    // Returns the number of commits between two hashes. If the hashes aren't part of the same history
+    // or if `hash2` comes before `hash1`, the result will be `0`
     pub fn distance_between_local_commit_hashes(&self, hash1: &str, hash2: &str) -> Result<i32, ConfigureError> {
 
         // If we're asked to calculate the distance between two of the same hash, we can skip a lot of work
@@ -226,14 +228,6 @@ pub fn fetch_secrets_latest_remote_data() -> Result<(), std::io::Error> {
     debug!("Fetch Complete");
 
     Ok(())
-}
-
-// Fetches the latest hash on the specified branch
-//
-// Returns the number of commits between two hashes. If the hashes aren't part of the same history
-// or if `hash2` comes before `hash1`, the result will be `0`
-pub fn secrets_repo_distance_between(hash1: &str, hash2: &str) -> Result<i32, ConfigureError> {
-    SecretsRepo::default().distance_between_local_commit_hashes(hash1, hash2)
 }
 
 #[derive(Debug)]

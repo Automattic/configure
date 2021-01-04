@@ -466,7 +466,7 @@ fn configure_file_distance_behind_secrets_repo(
     let latest_hash = repo.current_hash().expect("Unable to retrieve current secrets hash");
     debug!("New current hash is: {:?}", latest_hash);
 
-    let distance = secrets_repo_distance_between(&configuration.pinned_hash, &latest_hash)
+    let distance = repo.distance_between_local_commit_hashes(&configuration.pinned_hash, &latest_hash)
         .expect("Unable to determine the distance between two hashes");
 
     debug!("Distance between {:} and {:} is {:}", configuration.pinned_hash, latest_hash, distance);
