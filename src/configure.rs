@@ -460,7 +460,8 @@ fn configure_file_distance_behind_secrets_repo(
     let current_hash = repo.current_hash().expect("Unable to get current mobile secrets hash");
     debug!("Current hash is: {:?}", current_hash);
 
-    check_out_branch(branch_name).expect("Unable to switch branches");
+    repo.switch_to_branch(branch_name)
+        .expect("Unable to switch branches – you might need to fetch the most recent changes from the remote first?");
 
     let latest_hash = repo.current_hash().expect("Unable to retrieve current secrets hash");
     debug!("New current hash is: {:?}", latest_hash);

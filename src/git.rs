@@ -50,7 +50,7 @@ impl SecretsRepo {
         let current_branch = self.current_branch()?;
 
         if current_branch != branch_name {
-            check_out_branch(branch_name)?;
+            self.switch_to_branch(branch_name)?
         }
 
         let repo = get_secrets_repo()?;
@@ -230,10 +230,6 @@ pub fn fetch_secrets_latest_remote_data() -> Result<(), std::io::Error> {
 
 // Fetches the latest hash on the specified branch
 //
-pub fn check_out_branch(branch_name: &str) -> Result<(), ConfigureError> {
-    SecretsRepo::default().switch_to_branch(branch_name)
-}
-
 pub fn check_out_branch_at_revision(branch_name: &str, hash: &str) -> Result<(), ConfigureError> {
     SecretsRepo::default().switch_to_branch_at_revision(branch_name, hash)
 }
