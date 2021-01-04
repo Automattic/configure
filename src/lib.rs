@@ -23,7 +23,7 @@ pub fn init() {
 ///
 /// # Arguments
 ///
-/// * `configuration` - The project's parsed `ConfigurationFile` object.'
+/// * `configuration` - The project's parsed `ConfigurationFile` object.
 /// * `interactive` - Whether to prompt the user for confirmation before performing destructive operations
 ///
 pub fn apply(interactive: bool) {
@@ -67,6 +67,39 @@ pub fn update(interactive: bool) {
     }
 }
 
+/// Update the project name in the project `.configure` file
+///
+/// # Arguments
+///
+/// * `project_name` – the new project name that should be written to the `.configure` file.
+pub fn update_project_name(project_name: String) {
+    let mut configuration = read_configuration().expect("Unable to read project configuration");
+    configuration.project_name = project_name;
+    write_configuration(&configuration).expect("Unable to save project configuration");
+}
+
+/// Update the branch name in the project `.configure` file.
+///
+/// # Arguments
+///
+/// * `branch_name` – the new branch name that should be written to the `configure` file
+pub fn update_branch_name(branch_name: String) {
+    let mut configuration = read_configuration().expect("Unable to read project configuration");
+    configuration.branch = branch_name;
+    write_configuration(&configuration).expect("Unable to save project configuration");
+}
+
+/// Update the pinned hash in the project `.configure` file
+///
+/// # Arguments
+///
+/// * `pinned_hash` – the commit hash to copy configuration files from
+pub fn update_pinned_hash(pinned_hash: String) {
+    let mut configuration = read_configuration().expect("Unable to read project configuration");
+    configuration.pinned_hash = pinned_hash;
+    write_configuration(&configuration).expect("Unable to save project configuration");
+}
+
 /// Validate a project's .configure file
 ///
 pub fn validate() {
@@ -83,6 +116,7 @@ pub fn validate() {
 
 /// Create an encryption key suitable for use with this project
 ///
+/// The encryption key will be written to the `keys.json` file at the root of your local secrets repository. You will need to commit this change yourself.
 pub fn generate_encryption_key() -> String {
     crate::encryption::generate_key()
 }
