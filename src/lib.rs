@@ -53,7 +53,8 @@ pub fn apply(interactive: bool) {
 ///
 pub fn update(interactive: bool, configuration_file_path: Option<String>) {
     init_encryption();
-    let configuration = read_configuration_from_file(configuration_file_path)
+
+    let configuration = read_configuration_from_file(&configuration_file_path)
         .expect("Unable to read configuration from `.configure` file");
 
     if configuration.is_empty() {
@@ -63,7 +64,7 @@ pub fn update(interactive: bool, configuration_file_path: Option<String>) {
             ui::warn("Current configuration is empty – unable to update when running in non-interactive mode");
         }
     } else {
-        update_configuration(configuration, interactive);
+        update_configuration(configuration_file_path, interactive);
     }
 }
 
@@ -73,7 +74,7 @@ pub fn update(interactive: bool, configuration_file_path: Option<String>) {
 ///
 /// * `project_name` – the new project name that should be written to the `.configure` file.
 pub fn update_project_name(project_name: String, configuration_file_path: Option<String>) {
-    let mut configuration = read_configuration_from_file(configuration_file_path)
+    let mut configuration = read_configuration_from_file(&configuration_file_path)
         .expect("Unable to read project configuration");
     configuration.project_name = project_name;
     write_configuration(&configuration).expect("Unable to save project configuration");
@@ -85,7 +86,7 @@ pub fn update_project_name(project_name: String, configuration_file_path: Option
 ///
 /// * `branch_name` – the new branch name read_configurationthat should be written to the `configure` file
 pub fn update_branch_name(branch_name: String, configuration_file_path: Option<String>) {
-    let mut configuration = read_configuration_from_file(configuration_file_path)
+    let mut configuration = read_configuration_from_file(&configuration_file_path)
         .expect("Unable to read project configuration");
     configuration.branch = branch_name;
     write_configuration(&configuration).expect("Unable to save project configuration");
@@ -97,7 +98,7 @@ pub fn update_branch_name(branch_name: String, configuration_file_path: Option<S
 ///
 /// * `pinned_hash` – the commit hash to copy configuration files from
 pub fn update_pinned_hash(pinned_hash: String, configuration_file_path: Option<String>) {
-    let mut configuration = read_configuration_from_file(configuration_file_path)
+    let mut configuration = read_configuration_from_file(&configuration_file_path)
         .expect("Unable to read project configuration");
     configuration.pinned_hash = pinned_hash;
     write_configuration(&configuration).expect("Unable to save project configuration");

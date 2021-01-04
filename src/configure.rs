@@ -170,7 +170,11 @@ pub fn apply_configuration(configuration: &Configuration) {
     info!("Done")
 }
 
-pub fn update_configuration(mut configuration: Configuration, interactive: bool) -> Configuration {
+pub fn update_configuration(configuration_file_path: Option<String>, interactive: bool) -> Configuration {
+
+    let mut configuration = read_configuration_from_file(&configuration_file_path)
+        .expect("Unable to read configuration from `.configure` file");
+
     let starting_branch =
         get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
     let starting_ref =
@@ -198,13 +202,14 @@ pub fn update_configuration(mut configuration: Configuration, interactive: bool)
     }
 
     //
-    // Step 3 – Check if the currente configuration branch is in sync with the server or not.or
+    // Step 3 – Check if the current configuration branch is in sync with the server or not.or
     // If not, check with the user whether they'd like to continue
     //
     let status = get_secrets_repo_status().expect("Unable to get secrets repo status");
 
-    let should_continue = interactive
-        && match status.sync_state {
+    debug!("Repo status is: {:?}", status);
+
+    let should_continue = !interactive || match status.sync_state {
             RepoSyncState::Ahead => {
                 warn(&format!(
                     "Your local secrets repo has {:?} change(s) that the server does not",
@@ -234,40 +239,48 @@ pub fn update_configuration(mut configuration: Configuration, interactive: bool)
     //          If they out of date, we'll prompt the user to pull the latest remote
     //          changes into the local secrets repo before continuing.
     //
-    let distance =
-        configure_file_distance_behind_secrets_repo(&configuration, &configuration.branch);
-    if distance > 0 {
-        let message = format!(
-            "This project is {:?} commit(s) behind the latest secrets. Would you like to use the latest secrets?",
+    let distance = configure_file_distance_behind_secrets_repo(&configuration, &configuration.branch);
+
+    debug!("The project is {:} commit(s) behind the latest secrets", distance);
+
+    // Update the pinned hash when nothing has changed – this helps fill in the blanks when creating a `.configure` file by hand
+    if distance == 0 {
+        let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
+            .expect("Unable to fetch latest commit hash");
+        configuration.pinned_hash = latest_commit_hash;
+    }
+    else {
+         let message = format!(
+            "This project is {:} commit(s) behind the latest secrets. Would you like to use the latest secrets?",
             distance
         );
 
-        // Prompt to update to most recent secrets data in the branch
-        if interactive && confirm(&message) {
+        // Prompt to update to most recent secrets data in the branch (if we're in interactive mode – if not, just do it)
+        if !interactive || confirm(&message) {
+
             let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
                 .expect("Unable to fetch latest commit hash");
 
             debug!(
-                "Moving the repo to {:?} at {:?}",
+                "Moving the secrets repo to {:?} at {:?}",
                 &configuration.branch, latest_commit_hash
             );
 
             check_out_branch_at_revision(&configuration.branch, &latest_commit_hash)
                 .expect("Unable to check out branch at revision");
+
+            // Update the pinned hash in `.configure` file before continuing
+            debug!("Updating the .configure file pinned hash to {:?}", latest_commit_hash);
             configuration.pinned_hash = latest_commit_hash;
         }
-    }
-    // update the pinned hash even if nothing has changed – this helps fill in the blanks when creating a `.configure` file by hand
-    else {
-        let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
-            .expect("Unable to fetch latest commit hash");
-        configuration.pinned_hash = latest_commit_hash;
     }
 
     //
     // Step 5 – Write out encrypted files as needed
     //
-    write_configuration(&configuration).expect("Unable to save updated configuration");
+    let configure_file_path = resolve_configure_file_path(&configuration_file_path).expect("");
+    write_configuration_to(&configuration, &configure_file_path)
+        .expect("Unable to write configuration");
 
     //
     // Step 6 – Write out encrypted files as needed
@@ -278,7 +291,7 @@ pub fn update_configuration(mut configuration: Configuration, interactive: bool)
         .expect("Unable to copy encrypted files");
 
     //
-    // Step 7 – Roll everything back to how it was before we started
+    // Step 7 – Roll the secrets repo back to how it was before we started
     //
     crate::git::check_out_branch_at_revision(&starting_branch, &starting_ref)
         .expect("Unable to roll back to branch");
@@ -444,8 +457,14 @@ fn configure_file_distance_behind_secrets_repo(
 
     check_out_branch(branch_name).expect("Unable to switch branches");
 
-    let latest_hash = get_secrets_current_hash().unwrap();
-    let distance = secrets_repo_distance_between(&configuration.pinned_hash, &latest_hash).unwrap();
+    let latest_hash = get_secrets_current_hash()
+        .expect("Unable to retrieve current secrets hash");
+    debug!("New current hash is: {:?}", latest_hash);
+
+    let distance = secrets_repo_distance_between(&configuration.pinned_hash, &latest_hash)
+        .expect("Unable to determine the distance between two hashes");
+
+    debug!("Distance between {:} and {:} is {:}", configuration.pinned_hash, latest_hash, distance);
 
     // Put things back how we found them
     crate::git::check_out_branch_at_revision(&current_branch, &current_hash)

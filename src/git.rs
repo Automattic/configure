@@ -3,6 +3,44 @@ use git2::Oid;
 use git2::{BranchType, Error, ErrorCode, Repository, ResetType};
 use log::debug;
 
+trait ProvidesHashList {
+    fn get_hash_list() -> Result<Vec<String>, std::io::Error>;
+}
+
+pub struct SecretsRepo {
+    // pub path: String,
+}
+
+impl ProvidesHashList for SecretsRepo {
+    fn get_hash_list() -> Result<Vec<String>, std::io::Error> {
+        let path = crate::fs::find_secrets_repo()
+            .expect("Unable to find secrets repo");
+
+        debug!("Opening secrets repo at {:?}", path);
+
+        let output = std::process::Command::new("git")
+            .arg("--no-pager")
+            .arg("log")
+            .arg("-10000")
+            .arg("--pretty=format:%H")
+            .current_dir(std::fs::canonicalize(path).unwrap())
+            .output()?;
+
+        debug!("Fetched hash list");
+
+        let lines: Vec<String> = std::str::from_utf8(&output.stdout)
+            .expect("Unable to read hash list")
+            .lines()
+            .rev()
+            .map(|s| s.to_string())
+            .collect();
+
+        debug!("Hash list has {:} entries:", lines.len());
+
+        Ok(lines)
+    }
+}
+
 pub fn get_current_secrets_branch() -> Result<String, Error> {
     let repo = get_secrets_repo()?;
     let head = match repo.head() {
@@ -147,27 +185,15 @@ pub fn check_out_branch_at_revision(branch_name: &str, hash: &str) -> Result<(),
 pub fn secrets_repo_distance_between(hash1: &str, hash2: &str) -> Result<i32, std::io::Error> {
     // If we're asked to calculate the distance between two of the same hash, we can skip a lot of work
     if hash1 == hash2 {
+        debug!("Hashes are identical – skipping checks");
         return Ok(0);
     }
 
-    let path = crate::fs::find_secrets_repo().unwrap();
+    let hash_list = SecretsRepo::get_hash_list()?;
 
-    let output = std::process::Command::new("git")
-        .arg("--no-pager")
-        .arg("log")
-        .arg("-10000")
-        .arg("--pretty=format:%H")
-        .current_dir(std::fs::canonicalize(path).unwrap())
-        .output()?;
-
-    let iter = std::str::from_utf8(&output.stdout)
-        .expect("Unable to read hash list")
-        .lines()
-        .rev();
-
-    let index_of_configure_file_hash = iter
-        .clone()
-        .position(|r| r == "7a44543420761867bfb80f95c8864702d41059e3")
+    let index_of_configure_file_hash = hash_list
+        .iter()
+        .position(|r| r == hash1)
         .unwrap_or_else(|| {
             panic!(
                 "The pinned hash in .configure {} doesn't exist in the repository history",
@@ -175,18 +201,26 @@ pub fn secrets_repo_distance_between(hash1: &str, hash2: &str) -> Result<i32, st
             )
         });
 
-    let index_of_latest_repo_hash = iter.clone().position(|r| r == hash2).unwrap_or_else(|| {
-        panic!(
-            "The provided hash {} doesn't exist in the repository history",
-            &hash2
-        )
-    });
+    debug!("Configure file hash is at position {:}", index_of_configure_file_hash);
 
-    let distance = std::cmp::min(index_of_latest_repo_hash - index_of_configure_file_hash, 0);
+    let index_of_latest_repo_hash = hash_list
+        .iter()
+        .position(|r| r == hash2)
+        .unwrap_or_else(|| {
+            panic!(
+                "The provided hash {} doesn't exist in the repository history",
+                &hash2
+            )
+        });
+
+    debug!("Latest repo hash is at position {:}", index_of_latest_repo_hash);
+
+    let distance = (index_of_latest_repo_hash as i32 - index_of_configure_file_hash as i32).abs();
 
     Ok(distance as i32)
 }
 
+#[derive(Debug)]
 pub enum RepoSyncState {
     /// The local secrets repository has commits that the server does not have
     Ahead,
@@ -198,6 +232,7 @@ pub enum RepoSyncState {
     Synced,
 }
 
+#[derive(Debug)]
 pub struct RepoStatus {
     /// The local repository sync state – ahead of, behind, or in sync with the server
     pub sync_state: RepoSyncState,
