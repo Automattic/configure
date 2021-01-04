@@ -41,6 +41,9 @@ enum Command {
         ///
         #[structopt(short = "f", long = "force")]
         should_run_noninteractive: bool,
+
+        #[structopt(subcommand)]
+        subcommand: Option<UpdateSubCommand>,
     },
 
     /// Decrypt the current mobile secrets for this project.
@@ -62,6 +65,30 @@ enum Command {
 
     /// Create a new encryption key for use with a project
     CreateKey,
+}
+
+#[derive(StructOpt)]
+#[allow(clippy::enum_variant_names)] // Clippy doesn't like that these all start with `set`
+enum UpdateSubCommand {
+    /// Update the project name field in the .configure file for this project.
+    ///
+    /// Use quoted strings for multi-word entries, such as "My Project"
+    SetProjectName {
+        /// The new project name to write to the `project_name` field in the `.configure` file. Wrap multi-word entries in quotes, such as "My Project"
+        project_name: String,
+    },
+
+    /// Update the branch name field in the .configure file for this project
+    SetBranchName {
+        /// The new branch name to write to the `branch` field in the `.configure` file
+        branch_name: String,
+    },
+
+    /// Update the pinned commit hash field in the .configure file for this project
+    SetCommitHash {
+        /// The new commit hash to write to the `pinned_hash` field in the `.configure` file
+        commit_hash: String,
+    },
 }
 
 pub fn main() {
@@ -87,7 +114,21 @@ pub fn main() {
         } => configure::apply(!should_run_noninteractive),
         Command::Update {
             should_run_noninteractive,
-        } => configure::update(!should_run_noninteractive),
+            subcommand,
+        } => match subcommand {
+            Some(subcommand) => match subcommand {
+                UpdateSubCommand::SetProjectName { project_name } => {
+                    configure::update_project_name(project_name)
+                }
+                UpdateSubCommand::SetBranchName { branch_name } => {
+                    configure::update_branch_name(branch_name)
+                }
+                UpdateSubCommand::SetCommitHash { commit_hash } => {
+                    configure::update_pinned_hash(commit_hash)
+                }
+            },
+            None => configure::update(!should_run_noninteractive),
+        },
         Command::Init => configure::init(),
         Command::Validate => configure::validate(),
         Command::CreateKey => println!("{:}", configure::generate_encryption_key()),
