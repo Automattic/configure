@@ -230,11 +230,6 @@ pub fn fetch_secrets_latest_remote_data() -> Result<(), std::io::Error> {
 
 // Fetches the latest hash on the specified branch
 //
-// You should run `fetch_secrets_latest_remote_data` before this method, otherwise your info might be out-of-date
-pub fn get_secrets_latest_hash(branch: &str) -> Result<String, ConfigureError> {
-    SecretsRepo::default().latest_local_hash_for_branch(branch)
-}
-
 pub fn get_latest_hash_for_remote_branch(branch: &str) -> Result<String, ConfigureError> {
     SecretsRepo::default().latest_remote_hash_for_branch(branch)
 }

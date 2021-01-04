@@ -330,7 +330,7 @@ pub fn setup_configuration(mut configuration: Configuration) {
     configuration = prompt_for_branch(&repo, configuration, true);
 
     // Set the latest automatically hash based on the selected branch
-    configuration = set_latest_hash_if_needed(configuration);
+    configuration = set_latest_hash_if_needed(&repo, configuration);
 
     // Help the user add files
     configuration = prompt_to_add_files(configuration);
@@ -383,13 +383,14 @@ fn prompt_for_branch(repo: &SecretsRepo, mut configuration: Configuration, force
     configuration
 }
 
-fn set_latest_hash_if_needed(mut configuration: Configuration) -> Configuration {
+fn set_latest_hash_if_needed(repo: &SecretsRepo, mut configuration: Configuration) -> Configuration {
     if !configuration.needs_pinned_hash() {
         return configuration;
     }
 
-    let latest_hash = get_secrets_latest_hash(&configuration.branch)
+    let latest_hash =  repo.latest_local_hash_for_branch(&configuration.branch)
         .expect("Unable to fetch the latest secrets hash");
+
     configuration.pinned_hash = latest_hash;
 
     configuration
