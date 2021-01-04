@@ -214,14 +214,6 @@ impl SecretsRepo {
     }
 }
 
-pub fn get_current_secrets_branch() -> Result<String, ConfigureError> {
-    SecretsRepo::default().current_branch()
-}
-
-pub fn get_secrets_branches() -> Result<Vec<String>, ConfigureError> {
-    SecretsRepo::default().local_branch_names()
-}
-
 // Assumes you're using `origin` as the remote name
 pub fn fetch_secrets_latest_remote_data() -> Result<(), std::io::Error> {
     let path = crate::fs::find_secrets_repo().unwrap();

@@ -203,7 +203,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     // Step 2 – Check if the user wants to use a different secrets branch
     //
     if interactive {
-        configuration = prompt_for_branch(configuration, true);
+        configuration = prompt_for_branch(&secrets_repo, configuration, true);
     }
 
     //
@@ -244,7 +244,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     //          If they out of date, we'll prompt the user to pull the latest remote
     //          changes into the local secrets repo before continuing.
     //
-    let distance = configure_file_distance_behind_secrets_repo(&configuration, &configuration.branch);
+    let distance = configure_file_distance_behind_secrets_repo(&secrets_repo, &configuration, &configuration.branch);
 
     debug!("The project is {:} commit(s) behind the latest secrets", distance);
 
@@ -321,11 +321,13 @@ pub fn setup_configuration(mut configuration: Configuration) {
     println!("Let's get configuration set up for this project.");
     newline();
 
+    let repo = SecretsRepo::default();
+
     // Help the user set the `project_name` field
     configuration = prompt_for_project_name_if_needed(configuration);
 
     // Help the user set the `branch` field
-    configuration = prompt_for_branch(configuration, true);
+    configuration = prompt_for_branch(&repo, configuration, true);
 
     // Set the latest automatically hash based on the selected branch
     configuration = set_latest_hash_if_needed(configuration);
@@ -355,20 +357,18 @@ fn prompt_for_project_name_if_needed(mut configuration: Configuration) -> Config
     configuration
 }
 
-fn prompt_for_branch(mut configuration: Configuration, force: bool) -> Configuration {
+fn prompt_for_branch(repo: &SecretsRepo, mut configuration: Configuration, force: bool) -> Configuration {
     // If there's already a branch set, don't bother updating it
     if !configuration.needs_branch() && !force {
         return configuration;
     }
 
-    let secrets_repo_path = find_secrets_repo();
-    let current_branch =
-        get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
-    let branches = get_secrets_branches().expect("Unable to fetch mobile secrets branches");
+    let current_branch = repo.current_branch().expect("Unable to determine current mobile secrets branch");
+    let branches = repo.local_branch_names().expect("Unable to fetch mobile secrets branches");
 
     println!(
-        "We've found your mobile secrets repository at {:?}",
-        secrets_repo_path
+        "Using the secrets repository at {:?}",
+        repo.path
     );
     newline();
     println!("Which branch would you like to use?");
@@ -447,13 +447,13 @@ fn prompt_to_add_file() -> Option<File> {
 }
 
 fn configure_file_distance_behind_secrets_repo(
+    repo: &SecretsRepo,
     configuration: &Configuration,
     branch_name: &str,
 ) -> i32 {
     debug!("Checking if configure file is behind secrets repo");
 
-    let current_branch =
-        get_current_secrets_branch().expect("Unable to get current mobile secrets branch");
+    let current_branch = repo.current_branch().expect("Unable to get current mobile secrets branch");
     debug!("Current branch is: {:?}", current_branch);
 
     let current_hash =
