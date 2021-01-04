@@ -5,10 +5,13 @@ plugins {
 }
 
 configure {
-    useLocalBinary = false
+	/// Set this value to `false` to download and use a remote binary if needed
+    useLocalBinary = true
 
     cargoRoot = new File(System.getProperty("user.dir"))
             .getParentFile()    // configure/gradle-plugin
             .getParentFile()    // configure
             .toString();
+
+    configurationFilePath = new File(System.getProperty("user.dir"), ".configure")
 }
