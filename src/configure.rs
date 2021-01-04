@@ -250,7 +250,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
 
     // Update the pinned hash when nothing has changed – this helps fill in the blanks when creating a `.configure` file by hand
     if distance == 0 {
-        let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
+        let latest_commit_hash = secrets_repo.latest_remote_hash_for_branch(&configuration.branch)
             .expect("Unable to fetch latest commit hash");
         configuration.pinned_hash = latest_commit_hash;
     }
@@ -263,7 +263,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
         // Prompt to update to most recent secrets data in the branch (if we're in interactive mode – if not, just do it)
         if !interactive || confirm(&message) {
 
-            let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
+            let latest_commit_hash = secrets_repo.latest_remote_hash_for_branch(&configuration.branch)
                 .expect("Unable to fetch latest commit hash");
 
             debug!(
