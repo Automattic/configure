@@ -210,7 +210,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     // Step 3 – Check if the current configuration branch is in sync with the server or not.or
     // If not, check with the user whether they'd like to continue
     //
-    let status = get_secrets_repo_status().expect("Unable to get secrets repo status");
+    let status = secrets_repo.status().expect("Unable to get secrets repo status");
 
     debug!("Repo status is: {:?}", status);
 

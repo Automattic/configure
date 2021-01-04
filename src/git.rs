@@ -36,6 +36,10 @@ impl SecretsRepo {
         Ok(())
     }
 
+    pub fn status(&self) -> Result<RepoStatus, ConfigureError> {
+        RepoStatus::from_repo(self)
+    }
+
     pub fn current_branch(&self) -> Result<String, ConfigureError> {
         let repo = self.get_repo()?;
         let head = match repo.head() {
@@ -261,12 +265,12 @@ impl RepoStatus {
         }
     }
 
-    fn from_repo(repo: SecretsRepo) -> Result<RepoStatus, ConfigureError> {
+    fn from_repo(repo: &SecretsRepo) -> Result<RepoStatus, ConfigureError> {
         let output = std::process::Command::new("git")
             .arg("status")
             .arg("--porcelain")
             .arg("-b")
-            .current_dir(std::fs::canonicalize(repo.path).unwrap())
+            .current_dir(std::fs::canonicalize(&repo.path).unwrap())
             .output()?; // Wait for it to finish and collect its output
 
         let status = std::str::from_utf8(&output.stdout).expect("Unable to read output data");
@@ -297,10 +301,6 @@ impl RepoStatus {
 
         return Err(ConfigureError::GitStatusUnknownError {})
     }
-}
-
-pub fn get_secrets_repo_status() -> Result<RepoStatus, ConfigureError> {
-    RepoStatus::from_repo(SecretsRepo::default())
 }
 
 fn get_secrets_repo() -> Result<Repository, Error> {
