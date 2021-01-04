@@ -67,8 +67,14 @@ pub enum ConfigureError {
     #[error("Unable to decrypt file")]
     DataDecryptionError(#[from] std::io::Error),
 
+    #[error("Unknown git error")]
+    SecretsRepoError(#[from] git2::Error),
+
     #[error("Invalid git status")]
     GitStatusParsingError(#[from] std::num::ParseIntError),
+
+    #[error("Unable to find current secrets repo branch")]
+    GitGetCurrentBranchError,
 
     #[error("Invalid git status")]
     GitStatusUnknownError,
@@ -175,10 +181,9 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     let mut configuration = read_configuration_from_file(&configuration_file_path)
         .expect("Unable to read configuration from `.configure` file");
 
-    let starting_branch =
-        get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
-    let starting_ref =
-        get_secrets_current_hash().expect("Unable to determine current mobile secrets commit hash");
+    let secrets_repo = SecretsRepo::default();
+    let starting_branch = secrets_repo.current_branch().expect("Unable to determine current mobile secrets branch");
+    let starting_ref = secrets_repo.current_hash().expect("Unable to determine current mobile secrets commit hash");
 
     heading("Configure Update");
 
