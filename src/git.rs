@@ -1,5 +1,5 @@
 use git2::Oid;
-use git2::{BranchType, Error, ErrorCode, Repository, ResetType};
+use git2::{BranchType, ErrorCode, Repository, ResetType};
 use crate::ConfigureError;
 use log::debug;
 
@@ -72,7 +72,7 @@ impl SecretsRepo {
             self.switch_to_branch(branch_name)?
         }
 
-        let repo = get_secrets_repo()?;
+        let repo = self.get_repo()?;
         let latest_commit = repo.head()?.peel_to_commit()?;
 
         Ok(latest_commit.id().to_string())
@@ -114,11 +114,11 @@ impl SecretsRepo {
 
     pub fn switch_to_branch(&self, branch_name: &str) -> Result<(), ConfigureError> {
         debug!("Trying to check out branch: {:?}", branch_name);
-        let repo = get_secrets_repo()?;
+
         let ref_name = "refs/heads/".to_owned() + branch_name;
         debug!("Checking out: {:?}", ref_name);
 
-        repo.set_head(&ref_name)?;
+        self.get_repo()?.set_head(&ref_name)?;
 
         debug!("Checkout successful");
         Ok(())
@@ -131,7 +131,7 @@ impl SecretsRepo {
             return self.checkout_local_hash(revision);
         }
 
-        let repo = get_secrets_repo()?;
+        let repo = self.get_repo()?;
         let ref_name = "refs/heads/".to_owned() + branch_name;
 
         repo.set_head(&ref_name)?;
@@ -301,9 +301,4 @@ impl RepoStatus {
 
         return Err(ConfigureError::GitStatusUnknownError {})
     }
-}
-
-fn get_secrets_repo() -> Result<Repository, Error> {
-    let path = crate::fs::find_secrets_repo().unwrap();
-    Ok(Repository::open(path)?)
 }
