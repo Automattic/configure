@@ -21,6 +21,21 @@ impl SecretsRepo {
         Ok(Repository::open(&self.path)?)
     }
 
+    // Assumes you're using `origin` as the remote name
+    pub fn update_local_copy(&self) -> Result<(), ConfigureError> {
+
+        debug!("Running `git fetch`");
+
+        std::process::Command::new("git")
+            .arg("fetch")
+            .current_dir(std::fs::canonicalize(&self.path).unwrap())
+            .output()?; // Wait for it to finish and collect its output
+
+        debug!("Fetch Complete");
+
+        Ok(())
+    }
+
     pub fn current_branch(&self) -> Result<String, ConfigureError> {
         let repo = self.get_repo()?;
         let head = match repo.head() {
@@ -214,20 +229,6 @@ impl SecretsRepo {
 
         Ok(lines)
     }
-}
-
-// Assumes you're using `origin` as the remote name
-pub fn fetch_secrets_latest_remote_data() -> Result<(), std::io::Error> {
-    let path = crate::fs::find_secrets_repo().unwrap();
-
-    std::process::Command::new("git")
-        .arg("fetch")
-        .current_dir(std::fs::canonicalize(path).unwrap())
-        .output()?; // Wait for it to finish and collect its output
-
-    debug!("Fetch Complete");
-
-    Ok(())
 }
 
 #[derive(Debug)]

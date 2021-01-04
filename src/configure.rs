@@ -195,7 +195,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     bar.enable_steady_tick(125);
     bar.set_message("Fetching Latest Mobile Secrets");
 
-    fetch_secrets_latest_remote_data().expect("Unable to fetch latest mobile secrets");
+    secrets_repo.update_local_copy().expect("Unable to fetch latest mobile secrets");
 
     bar.finish_and_clear();
 
