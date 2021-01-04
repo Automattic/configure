@@ -8,13 +8,27 @@ import java.util.zip.ZipFile
 
 class ConfigurePlugin : Plugin<Project> {
 
+    // Plugin Registration Method (unrelated to `configure apply`)
     override fun apply(target: Project) {
-        ensureBinaryExists()
-        ensureBinaryIsExecutable()
 
-        target.tasks.register("applyConfiguration", ConfigureApplyTask::class.java) {
+        val task = target.tasks.register("applyConfiguration", ConfigureApplyTask::class.java) {
             this.group = "configure"
             this.description = "Apply the encrypted configuration"
+        }
+
+        val extension = target.extensions.create("configure", ConfigureExtension::class.java)
+
+        // Copy the extension configuration data into the task
+        target.afterEvaluate {
+            task.configure {
+                this.useLocalBinary = extension.useLocalBinary
+                this.cargoRoot = extension.cargoRoot
+
+                if(!extension.useLocalBinary) {
+                    ensureBinaryExists()
+                    ensureBinaryIsExecutable()
+                }
+            }
         }
     }
 

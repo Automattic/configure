@@ -1,0 +1,14 @@
+/// A simple configuration for testing the `configure` plugin
+
+plugins {
+    id 'com.automattic.android.configure'
+}
+
+configure {
+    useLocalBinary = false
+
+    cargoRoot = new File(System.getProperty("user.dir"))
+            .getParentFile()    // configure/gradle-plugin
+            .getParentFile()    // configure
+            .toString();
+}
