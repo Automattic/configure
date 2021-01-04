@@ -456,14 +456,12 @@ fn configure_file_distance_behind_secrets_repo(
     let current_branch = repo.current_branch().expect("Unable to get current mobile secrets branch");
     debug!("Current branch is: {:?}", current_branch);
 
-    let current_hash =
-        get_secrets_current_hash().expect("Unable to get current mobile secrets hash");
+    let current_hash = repo.current_hash().expect("Unable to get current mobile secrets hash");
     debug!("Current hash is: {:?}", current_hash);
 
     check_out_branch(branch_name).expect("Unable to switch branches");
 
-    let latest_hash = get_secrets_current_hash()
-        .expect("Unable to retrieve current secrets hash");
+    let latest_hash = repo.current_hash().expect("Unable to retrieve current secrets hash");
     debug!("New current hash is: {:?}", latest_hash);
 
     let distance = secrets_repo_distance_between(&configuration.pinned_hash, &latest_hash)
