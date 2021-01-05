@@ -2,8 +2,8 @@ mod configure;
 mod encryption;
 mod fs;
 mod git;
-mod ui;
 mod string;
+mod ui;
 
 use crate::configure::*;
 use crate::fs::*;

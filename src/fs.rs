@@ -104,7 +104,9 @@ pub fn read_configuration() -> Result<Configuration, ConfigureError> {
     read_configuration_from_file(&None)
 }
 
-pub fn resolve_configure_file_path(configure_file_path: &Option<String>) -> Result<PathBuf, ConfigureError> {
+pub fn resolve_configure_file_path(
+    configure_file_path: &Option<String>,
+) -> Result<PathBuf, ConfigureError> {
     match configure_file_path {
         Some(path) => Ok(PathBuf::from(path)),
         None => Ok(find_configure_file()?),
@@ -114,7 +116,6 @@ pub fn resolve_configure_file_path(configure_file_path: &Option<String>) -> Resu
 pub fn read_configuration_from_file(
     configure_file_path: &Option<String>,
 ) -> Result<Configuration, ConfigureError> {
-
     let configure_file_path = resolve_configure_file_path(&configure_file_path)?;
 
     if !configure_file_path.is_file() {

@@ -1,19 +1,22 @@
-pub fn distance_between_strings_in(string1: &str, string2: &str, strings: &Vec<String>) -> Option<i32> {
-
+pub fn distance_between_strings_in(
+    string1: &str,
+    string2: &str,
+    strings: &Vec<String>,
+) -> Option<i32> {
     let str1_ix = index_of_string_in(string1, &strings);
     let str2_ix = index_of_string_in(string2, &strings);
 
     if str1_ix.is_some() && str2_ix.is_some() {
-        return Some( (str1_ix.unwrap() - str2_ix.unwrap()).abs() )
+        return Some((str1_ix.unwrap() - str2_ix.unwrap()).abs());
     } else {
-        return None
+        return None;
     }
 }
 
 fn index_of_string_in(string: &str, strings: &Vec<String>) -> Option<i32> {
     match strings.iter().position(|r| r == string) {
         Some(ix) => Some(ix as i32),
-        None => None
+        None => None,
     }
 }
 

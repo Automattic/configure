@@ -38,7 +38,8 @@ impl Configuration {
     }
 
     pub fn set_pinned_hash_from_repo(&mut self, repo: &SecretsRepo) {
-        let latest_hash =  repo.latest_local_hash_for_branch(&self.branch)
+        let latest_hash = repo
+            .latest_local_hash_for_branch(&self.branch)
             .expect("Unable to fetch the latest secrets hash");
 
         self.pinned_hash = latest_hash;
@@ -179,14 +180,20 @@ pub fn apply_configuration(configuration: &Configuration) {
     info!("Done")
 }
 
-pub fn update_configuration(configuration_file_path: Option<String>, interactive: bool) -> Configuration {
-
+pub fn update_configuration(
+    configuration_file_path: Option<String>,
+    interactive: bool,
+) -> Configuration {
     let mut configuration = read_configuration_from_file(&configuration_file_path)
         .expect("Unable to read configuration from `.configure` file");
 
     let secrets_repo = SecretsRepo::default();
-    let starting_branch = secrets_repo.current_branch().expect("Unable to determine current mobile secrets branch");
-    let starting_ref = secrets_repo.current_hash().expect("Unable to determine current mobile secrets commit hash");
+    let starting_branch = secrets_repo
+        .current_branch()
+        .expect("Unable to determine current mobile secrets branch");
+    let starting_ref = secrets_repo
+        .current_hash()
+        .expect("Unable to determine current mobile secrets commit hash");
 
     heading("Configure Update");
 
@@ -198,7 +205,9 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     bar.enable_steady_tick(125);
     bar.set_message("Fetching Latest Mobile Secrets");
 
-    secrets_repo.update_local_copy().expect("Unable to fetch latest mobile secrets");
+    secrets_repo
+        .update_local_copy()
+        .expect("Unable to fetch latest mobile secrets");
 
     bar.finish_and_clear();
 
@@ -213,11 +222,14 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     // Step 3 – Check if the current configuration branch is in sync with the server or not.or
     // If not, check with the user whether they'd like to continue
     //
-    let status = secrets_repo.status().expect("Unable to get secrets repo status");
+    let status = secrets_repo
+        .status()
+        .expect("Unable to get secrets repo status");
 
     debug!("Repo status is: {:?}", status);
 
-    let should_continue = !interactive || match status.sync_state {
+    let should_continue = !interactive
+        || match status.sync_state {
             RepoSyncState::Ahead => {
                 warn(&format!(
                     "Your local secrets repo has {:?} change(s) that the server does not",
@@ -248,24 +260,27 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     //          changes into the local secrets repo before continuing.
     //
     let distance = secrets_repo.commits_ahead_of_configuration(&configuration);
-    debug!("The project is {:} commit(s) behind the latest secrets", distance);
+    debug!(
+        "The project is {:} commit(s) behind the latest secrets",
+        distance
+    );
 
     // Update the pinned hash when nothing has changed – this helps fill in the blanks when creating a `.configure` file by hand
     if distance == 0 {
-        let latest_commit_hash = secrets_repo.latest_remote_hash_for_branch(&configuration.branch)
+        let latest_commit_hash = secrets_repo
+            .latest_remote_hash_for_branch(&configuration.branch)
             .expect("Unable to fetch latest commit hash");
         configuration.pinned_hash = latest_commit_hash;
-    }
-    else {
-         let message = format!(
+    } else {
+        let message = format!(
             "This project is {:} commit(s) behind the latest secrets. Would you like to use the latest secrets?",
             distance
         );
 
         // Prompt to update to most recent secrets data in the branch (if we're in interactive mode – if not, just do it)
         if !interactive || confirm(&message) {
-
-            let latest_commit_hash = secrets_repo.latest_remote_hash_for_branch(&configuration.branch)
+            let latest_commit_hash = secrets_repo
+                .latest_remote_hash_for_branch(&configuration.branch)
                 .expect("Unable to fetch latest commit hash");
 
             debug!(
@@ -273,11 +288,15 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
                 &configuration.branch, latest_commit_hash
             );
 
-            secrets_repo.switch_to_branch_at_revision(&configuration.branch, &latest_commit_hash)
+            secrets_repo
+                .switch_to_branch_at_revision(&configuration.branch, &latest_commit_hash)
                 .expect("Unable to check out branch at revision");
 
             // Update the pinned hash in `.configure` file before continuing
-            debug!("Updating the .configure file pinned hash to {:?}", latest_commit_hash);
+            debug!(
+                "Updating the .configure file pinned hash to {:?}",
+                latest_commit_hash
+            );
             configuration.pinned_hash = latest_commit_hash;
         }
     }
@@ -300,7 +319,8 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     //
     // Step 7 – Roll the secrets repo back to how it was before we started
     //
-    secrets_repo.switch_to_branch_at_revision(&starting_branch, &starting_ref)
+    secrets_repo
+        .switch_to_branch_at_revision(&starting_branch, &starting_ref)
         .expect("Unable to roll back to branch");
 
     //
@@ -359,19 +379,24 @@ fn prompt_for_project_name_if_needed(mut configuration: Configuration) -> Config
     configuration
 }
 
-fn prompt_for_branch(repo: &SecretsRepo, mut configuration: Configuration, force: bool) -> Configuration {
+fn prompt_for_branch(
+    repo: &SecretsRepo,
+    mut configuration: Configuration,
+    force: bool,
+) -> Configuration {
     // If there's already a branch set, don't bother updating it
     if !configuration.needs_branch() && !force {
         return configuration;
     }
 
-    let current_branch = repo.current_branch().expect("Unable to determine current mobile secrets branch");
-    let branches = repo.local_branch_names().expect("Unable to fetch mobile secrets branches");
+    let current_branch = repo
+        .current_branch()
+        .expect("Unable to determine current mobile secrets branch");
+    let branches = repo
+        .local_branch_names()
+        .expect("Unable to fetch mobile secrets branches");
 
-    println!(
-        "Using the secrets repository at {:?}",
-        repo.path
-    );
+    println!("Using the secrets repository at {:?}", repo.path);
     newline();
     println!("Which branch would you like to use?");
     println!("Current Branch: {}", style(&current_branch).green());

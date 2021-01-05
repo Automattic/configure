@@ -1,8 +1,8 @@
+use crate::string::distance_between_strings_in;
 use crate::Configuration;
+use crate::ConfigureError;
 use git2::Oid;
 use git2::{BranchType, ErrorCode, Repository, ResetType};
-use crate::ConfigureError;
-use crate::string::distance_between_strings_in;
 use log::debug;
 
 pub struct SecretsRepo {
@@ -12,20 +12,18 @@ pub struct SecretsRepo {
 impl Default for SecretsRepo {
     fn default() -> Self {
         SecretsRepo {
-            path: crate::fs::find_secrets_repo().expect("Unable to find secrets repo")
+            path: crate::fs::find_secrets_repo().expect("Unable to find secrets repo"),
         }
     }
 }
 
 impl SecretsRepo {
-
     fn get_repo(&self) -> Result<Repository, ConfigureError> {
         Ok(Repository::open(&self.path)?)
     }
 
     // Assumes you're using `origin` as the remote name
     pub fn update_local_copy(&self) -> Result<(), ConfigureError> {
-
         debug!("Running `git fetch`");
 
         std::process::Command::new("git")
@@ -46,15 +44,15 @@ impl SecretsRepo {
         let repo = self.get_repo()?;
         let head = match repo.head() {
             Ok(head) => Some(head),
-            Err(ref e) if e.code() == ErrorCode::UnbornBranch || e.code() == ErrorCode::NotFound => {
+            Err(ref e)
+                if e.code() == ErrorCode::UnbornBranch || e.code() == ErrorCode::NotFound =>
+            {
                 None
             }
             Err(_) => return Err(ConfigureError::GitGetCurrentBranchError),
         };
 
-        let head = head
-            .as_ref()
-            .and_then(|h| h.shorthand());
+        let head = head.as_ref().and_then(|h| h.shorthand());
 
         Ok(head.unwrap().to_string())
     }
@@ -66,8 +64,10 @@ impl SecretsRepo {
     }
 
     // TODO: I don't think this works right?
-    pub fn latest_local_hash_for_branch(&self, branch_name: &str) -> Result<String, ConfigureError> {
-
+    pub fn latest_local_hash_for_branch(
+        &self,
+        branch_name: &str,
+    ) -> Result<String, ConfigureError> {
         let current_branch = self.current_branch()?;
 
         if current_branch != branch_name {
@@ -80,8 +80,10 @@ impl SecretsRepo {
         Ok(latest_commit.id().to_string())
     }
 
-    pub fn latest_remote_hash_for_branch(&self, branch_name: &str) -> Result<String, ConfigureError> {
-
+    pub fn latest_remote_hash_for_branch(
+        &self,
+        branch_name: &str,
+    ) -> Result<String, ConfigureError> {
         let remote_ref = "origin/".to_owned() + &branch_name;
 
         debug!("Looking for remote ref: {:?}", remote_ref);
@@ -104,9 +106,7 @@ impl SecretsRepo {
 
         let oid = Oid::from_str(hash)?;
 
-        let obj = repo
-            .find_commit(oid)?
-            .into_object();
+        let obj = repo.find_commit(oid)?.into_object();
 
         repo.set_head_detached(oid)?;
         repo.reset(&obj, ResetType::Hard, None)?;
@@ -126,7 +126,11 @@ impl SecretsRepo {
         Ok(())
     }
 
-    pub fn switch_to_branch_at_revision(&self, branch_name: &str, revision: &str) -> Result<(), ConfigureError> {
+    pub fn switch_to_branch_at_revision(
+        &self,
+        branch_name: &str,
+        revision: &str,
+    ) -> Result<(), ConfigureError> {
         // If we're asked to check out a commit that's not currently on a branch,
         // just switch to it directly
         if branch_name == "HEAD" {
@@ -140,9 +144,7 @@ impl SecretsRepo {
 
         let oid = Oid::from_str(revision)?;
 
-        let obj = repo
-            .find_commit(oid)?
-            .into_object();
+        let obj = repo.find_commit(oid)?.into_object();
 
         repo.reset(&obj, ResetType::Hard, None)?;
 
@@ -171,16 +173,22 @@ impl SecretsRepo {
 
     /// How far out of date the configure file is relative to the secrets repo
     pub fn commits_ahead_of_configuration(&self, configuration: &Configuration) -> i32 {
-        let current_branch = self.current_branch().expect("Unable to get current mobile secrets branch");
-        let current_hash = self.current_hash().expect("Unable to get current mobile secrets hash");
+        let current_branch = self
+            .current_branch()
+            .expect("Unable to get current mobile secrets branch");
+        let current_hash = self
+            .current_hash()
+            .expect("Unable to get current mobile secrets hash");
 
         self.switch_to_branch(&configuration.branch)
             .expect("Unable to switch branches – you might need to fetch the most recent changes from the remote first?");
 
-        let latest_hash = self.current_hash()
+        let latest_hash = self
+            .current_hash()
             .expect("Unable to retrieve current secrets hash");
 
-        let distance = self.distance_between_local_commit_hashes(&configuration.pinned_hash, &latest_hash)
+        let distance = self
+            .distance_between_local_commit_hashes(&configuration.pinned_hash, &latest_hash)
             .expect("Unable to determine the distance between two hashes");
 
         // Restore the secrets repo to its state before starting
@@ -192,8 +200,11 @@ impl SecretsRepo {
 
     // Returns the number of commits between two hashes. If the hashes aren't part of the same history
     // or if `hash2` comes before `hash1`, the result will be `0`
-    fn distance_between_local_commit_hashes(&self, hash1: &str, hash2: &str) -> Result<i32, ConfigureError> {
-
+    fn distance_between_local_commit_hashes(
+        &self,
+        hash1: &str,
+        hash2: &str,
+    ) -> Result<i32, ConfigureError> {
         // If we're asked to calculate the distance between two of the same hash, we can skip a lot of work
         if hash1 == hash2 {
             debug!("Hashes are identical – skipping checks");
@@ -204,12 +215,11 @@ impl SecretsRepo {
 
         match distance_between_strings_in(hash1, hash2, &hash_list) {
             Some(distance) => Ok(distance),
-            None => Err(ConfigureError::GitStatusUnknownError)
+            None => Err(ConfigureError::GitStatusUnknownError),
         }
     }
 
     fn get_hash_list(&self) -> Result<Vec<String>, std::io::Error> {
-
         debug!("Opening secrets repo at {:?}", self.path);
 
         let output = std::process::Command::new("git")
@@ -299,6 +309,6 @@ impl RepoStatus {
             });
         }
 
-        return Err(ConfigureError::GitStatusUnknownError {})
+        return Err(ConfigureError::GitStatusUnknownError {});
     }
 }
