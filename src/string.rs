@@ -1,19 +1,19 @@
 pub fn distance_between_strings_in(
     string1: &str,
     string2: &str,
-    strings: &Vec<String>,
+    strings: &[String],
 ) -> Option<i32> {
     let str1_ix = index_of_string_in(string1, &strings);
     let str2_ix = index_of_string_in(string2, &strings);
 
-    if str1_ix.is_some() && str2_ix.is_some() {
-        return Some((str1_ix.unwrap() - str2_ix.unwrap()).abs());
+    if let (Some(ix1), Some(ix2)) = (str1_ix, str2_ix) {
+        Some((ix1 - ix2).abs())
     } else {
-        return None;
+        None
     }
 }
 
-fn index_of_string_in(string: &str, strings: &Vec<String>) -> Option<i32> {
+fn index_of_string_in(string: &str, strings: &[String]) -> Option<i32> {
     match strings.iter().position(|r| r == string) {
         Some(ix) => Some(ix as i32),
         None => None,

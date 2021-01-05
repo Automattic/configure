@@ -113,7 +113,7 @@ pub fn main() {
     match Options::from_args().command {
         Command::Apply {
             should_run_noninteractive,
-            configuration_file_path
+            configuration_file_path,
         } => configure::apply(!should_run_noninteractive, configuration_file_path),
         Command::Update {
             should_run_noninteractive,

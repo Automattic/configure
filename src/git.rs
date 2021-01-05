@@ -84,7 +84,7 @@ impl SecretsRepo {
         &self,
         branch_name: &str,
     ) -> Result<String, ConfigureError> {
-        let remote_ref = "origin/".to_owned() + &branch_name;
+        let remote_ref = "origin/".to_owned() + branch_name;
 
         debug!("Looking for remote ref: {:?}", remote_ref);
 
@@ -309,6 +309,6 @@ impl RepoStatus {
             });
         }
 
-        return Err(ConfigureError::GitStatusUnknownError {});
+        Err(ConfigureError::GitStatusUnknownError {})
     }
 }
