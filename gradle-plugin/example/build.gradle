@@ -14,4 +14,7 @@ configure {
             .toString();
 
     configurationFilePath = new File(System.getProperty("user.dir"), ".configure")
+
+    /// Output as much info as possible about what the `configure` binary is doing
+    verboseOutput = false
 }

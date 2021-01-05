@@ -29,12 +29,14 @@ class ConfigurePlugin : Plugin<Project> {
                 this.useLocalBinary = extension.useLocalBinary
                 this.cargoRoot = extension.cargoRoot
                 this.configureFilePath = extension.configurationFilePath
+                this.verboseOutput = extension.verboseOutput
             }
 
             updateTask.configure {
                 this.useLocalBinary = extension.useLocalBinary
                 this.cargoRoot = extension.cargoRoot
                 this.configureFilePath = extension.configurationFilePath
+                this.verboseOutput = extension.verboseOutput
             }
 
             if(!extension.useLocalBinary) {

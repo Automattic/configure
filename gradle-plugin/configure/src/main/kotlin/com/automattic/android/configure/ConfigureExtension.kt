@@ -4,4 +4,6 @@ open class ConfigureExtension {
     var useLocalBinary = false
     var cargoRoot = ""
     var configurationFilePath = ".configure"
+
+    var verboseOutput = true
 }
