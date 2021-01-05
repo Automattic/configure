@@ -37,16 +37,19 @@ impl Configuration {
         }
     }
 
+    pub fn set_pinned_hash_from_repo(&mut self, repo: &SecretsRepo) {
+        let latest_hash =  repo.latest_local_hash_for_branch(&self.branch)
+            .expect("Unable to fetch the latest secrets hash");
+
+        self.pinned_hash = latest_hash;
+    }
+
     fn needs_project_name(&self) -> bool {
         self.project_name == ""
     }
 
     fn needs_branch(&self) -> bool {
         self.branch == ""
-    }
-
-    fn needs_pinned_hash(&self) -> bool {
-        self.pinned_hash == ""
     }
 }
 
@@ -244,8 +247,7 @@ pub fn update_configuration(configuration_file_path: Option<String>, interactive
     //          If they out of date, we'll prompt the user to pull the latest remote
     //          changes into the local secrets repo before continuing.
     //
-    let distance = configure_file_distance_behind_secrets_repo(&secrets_repo, &configuration, &configuration.branch);
-
+    let distance = secrets_repo.commits_ahead_of_configuration(&configuration);
     debug!("The project is {:} commit(s) behind the latest secrets", distance);
 
     // Update the pinned hash when nothing has changed – this helps fill in the blanks when creating a `.configure` file by hand
@@ -330,7 +332,7 @@ pub fn setup_configuration(mut configuration: Configuration) {
     configuration = prompt_for_branch(&repo, configuration, true);
 
     // Set the latest automatically hash based on the selected branch
-    configuration = set_latest_hash_if_needed(&repo, configuration);
+    configuration.set_pinned_hash_from_repo(&repo);
 
     // Help the user add files
     configuration = prompt_to_add_files(configuration);
@@ -379,19 +381,6 @@ fn prompt_for_branch(repo: &SecretsRepo, mut configuration: Configuration, force
 
     configuration.branch = selected_branch.clone();
     println!("Secrets repo branch set to: {:?}", selected_branch);
-
-    configuration
-}
-
-fn set_latest_hash_if_needed(repo: &SecretsRepo, mut configuration: Configuration) -> Configuration {
-    if !configuration.needs_pinned_hash() {
-        return configuration;
-    }
-
-    let latest_hash =  repo.latest_local_hash_for_branch(&configuration.branch)
-        .expect("Unable to fetch the latest secrets hash");
-
-    configuration.pinned_hash = latest_hash;
 
     configuration
 }
@@ -447,37 +436,6 @@ fn prompt_to_add_file() -> Option<File> {
     })
 }
 
-fn configure_file_distance_behind_secrets_repo(
-    repo: &SecretsRepo,
-    configuration: &Configuration,
-    branch_name: &str,
-) -> i32 {
-    debug!("Checking if configure file is behind secrets repo");
-
-    let current_branch = repo.current_branch().expect("Unable to get current mobile secrets branch");
-    debug!("Current branch is: {:?}", current_branch);
-
-    let current_hash = repo.current_hash().expect("Unable to get current mobile secrets hash");
-    debug!("Current hash is: {:?}", current_hash);
-
-    repo.switch_to_branch(branch_name)
-        .expect("Unable to switch branches – you might need to fetch the most recent changes from the remote first?");
-
-    let latest_hash = repo.current_hash().expect("Unable to retrieve current secrets hash");
-    debug!("New current hash is: {:?}", latest_hash);
-
-    let distance = repo.distance_between_local_commit_hashes(&configuration.pinned_hash, &latest_hash)
-        .expect("Unable to determine the distance between two hashes");
-
-    debug!("Distance between {:} and {:} is {:}", configuration.pinned_hash, latest_hash, distance);
-
-    // Put things back how we found them
-    repo.switch_to_branch_at_revision(&current_branch, &current_hash)
-        .expect("Unable to roll back to branch");
-
-    distance
-}
-
 #[cfg(test)]
 mod tests {
     // Import the parent scope
@@ -494,8 +452,8 @@ mod tests {
     }
 
     #[test]
-    fn test_that_default_configuration_needs_pinned_hash() {
-        assert!(Configuration::default().needs_pinned_hash())
+    fn test_that_default_configuration_pinned_hash_is_empty() {
+        assert!(Configuration::default().pinned_hash == "")
     }
 
     #[test]

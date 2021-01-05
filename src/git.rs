@@ -1,3 +1,4 @@
+use crate::Configuration;
 use git2::Oid;
 use git2::{BranchType, ErrorCode, Repository, ResetType};
 use crate::ConfigureError;
@@ -167,9 +168,30 @@ impl SecretsRepo {
         Ok(branch_names)
     }
 
+    /// How far out of date the configure file is relative to the secrets repo
+    pub fn commits_ahead_of_configuration(&self, configuration: &Configuration) -> i32 {
+        let current_branch = self.current_branch().expect("Unable to get current mobile secrets branch");
+        let current_hash = self.current_hash().expect("Unable to get current mobile secrets hash");
+
+        self.switch_to_branch(&configuration.branch)
+            .expect("Unable to switch branches – you might need to fetch the most recent changes from the remote first?");
+
+        let latest_hash = self.current_hash()
+            .expect("Unable to retrieve current secrets hash");
+
+        let distance = self.distance_between_local_commit_hashes(&configuration.pinned_hash, &latest_hash)
+            .expect("Unable to determine the distance between two hashes");
+
+        // Restore the secrets repo to its state before starting
+        self.switch_to_branch_at_revision(&current_branch, &current_hash)
+            .expect("Unable to roll back to branch");
+
+        distance
+    }
+
     // Returns the number of commits between two hashes. If the hashes aren't part of the same history
     // or if `hash2` comes before `hash1`, the result will be `0`
-    pub fn distance_between_local_commit_hashes(&self, hash1: &str, hash2: &str) -> Result<i32, ConfigureError> {
+    fn distance_between_local_commit_hashes(&self, hash1: &str, hash2: &str) -> Result<i32, ConfigureError> {
 
         // If we're asked to calculate the distance between two of the same hash, we can skip a lot of work
         if hash1 == hash2 {
