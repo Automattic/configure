@@ -11,23 +11,37 @@ class ConfigurePlugin : Plugin<Project> {
     // Plugin Registration Method (unrelated to `configure apply`)
     override fun apply(target: Project) {
 
-        val task = target.tasks.register("applyConfiguration", ConfigureApplyTask::class.java) {
+        val applyTask = target.tasks.register("applyConfiguration", ConfigureApplyTask::class.java) {
             this.group = "configure"
             this.description = "Apply the encrypted configuration"
+        }
+
+        val updateTask = target.tasks.register("updateConfiguration", ConfigureUpdateTask::class.java) {
+            this.group = "configure"
+            this.description = "Update the encrypted configuration files from the secrets repository"
         }
 
         val extension = target.extensions.create("configure", ConfigureExtension::class.java)
 
         // Copy the extension configuration data into the task
         target.afterEvaluate {
-            task.configure {
+            applyTask.configure {
                 this.useLocalBinary = extension.useLocalBinary
                 this.cargoRoot = extension.cargoRoot
+                this.configureFilePath = extension.configurationFilePath
+                this.verboseOutput = extension.verboseOutput
+            }
 
-                if(!extension.useLocalBinary) {
-                    ensureBinaryExists()
-                    ensureBinaryIsExecutable()
-                }
+            updateTask.configure {
+                this.useLocalBinary = extension.useLocalBinary
+                this.cargoRoot = extension.cargoRoot
+                this.configureFilePath = extension.configurationFilePath
+                this.verboseOutput = extension.verboseOutput
+            }
+
+            if(!extension.useLocalBinary) {
+                ensureBinaryExists()
+                ensureBinaryIsExecutable()
             }
         }
     }

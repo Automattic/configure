@@ -37,16 +37,20 @@ impl Configuration {
         }
     }
 
+    pub fn set_pinned_hash_from_repo(&mut self, repo: &SecretsRepo) {
+        let latest_hash = repo
+            .latest_local_hash_for_branch(&self.branch)
+            .expect("Unable to fetch the latest secrets hash");
+
+        self.pinned_hash = latest_hash;
+    }
+
     fn needs_project_name(&self) -> bool {
         self.project_name == ""
     }
 
     fn needs_branch(&self) -> bool {
         self.branch == ""
-    }
-
-    fn needs_pinned_hash(&self) -> bool {
-        self.pinned_hash == ""
     }
 }
 
@@ -67,8 +71,14 @@ pub enum ConfigureError {
     #[error("Unable to decrypt file")]
     DataDecryptionError(#[from] std::io::Error),
 
+    #[error("Unknown git error")]
+    SecretsRepoError(#[from] git2::Error),
+
     #[error("Invalid git status")]
     GitStatusParsingError(#[from] std::num::ParseIntError),
+
+    #[error("Unable to find current secrets repo branch")]
+    GitGetCurrentBranchError,
 
     #[error("Invalid git status")]
     GitStatusUnknownError,
@@ -170,11 +180,20 @@ pub fn apply_configuration(configuration: &Configuration) {
     info!("Done")
 }
 
-pub fn update_configuration(mut configuration: Configuration, interactive: bool) -> Configuration {
-    let starting_branch =
-        get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
-    let starting_ref =
-        get_secrets_current_hash().expect("Unable to determine current mobile secrets commit hash");
+pub fn update_configuration(
+    configuration_file_path: Option<String>,
+    interactive: bool,
+) -> Configuration {
+    let mut configuration = read_configuration_from_file(&configuration_file_path)
+        .expect("Unable to read configuration from `.configure` file");
+
+    let secrets_repo = SecretsRepo::default();
+    let starting_branch = secrets_repo
+        .current_branch()
+        .expect("Unable to determine current mobile secrets branch");
+    let starting_ref = secrets_repo
+        .current_hash()
+        .expect("Unable to determine current mobile secrets commit hash");
 
     heading("Configure Update");
 
@@ -186,7 +205,9 @@ pub fn update_configuration(mut configuration: Configuration, interactive: bool)
     bar.enable_steady_tick(125);
     bar.set_message("Fetching Latest Mobile Secrets");
 
-    fetch_secrets_latest_remote_data().expect("Unable to fetch latest mobile secrets");
+    secrets_repo
+        .update_local_copy()
+        .expect("Unable to fetch latest mobile secrets");
 
     bar.finish_and_clear();
 
@@ -194,17 +215,21 @@ pub fn update_configuration(mut configuration: Configuration, interactive: bool)
     // Step 2 – Check if the user wants to use a different secrets branch
     //
     if interactive {
-        configuration = prompt_for_branch(configuration, true);
+        configuration = prompt_for_branch(&secrets_repo, configuration, true);
     }
 
     //
-    // Step 3 – Check if the currente configuration branch is in sync with the server or not.or
+    // Step 3 – Check if the current configuration branch is in sync with the server or not.or
     // If not, check with the user whether they'd like to continue
     //
-    let status = get_secrets_repo_status().expect("Unable to get secrets repo status");
+    let status = secrets_repo
+        .status()
+        .expect("Unable to get secrets repo status");
 
-    let should_continue = interactive
-        && match status.sync_state {
+    debug!("Repo status is: {:?}", status);
+
+    let should_continue = !interactive
+        || match status.sync_state {
             RepoSyncState::Ahead => {
                 warn(&format!(
                     "Your local secrets repo has {:?} change(s) that the server does not",
@@ -234,40 +259,54 @@ pub fn update_configuration(mut configuration: Configuration, interactive: bool)
     //          If they out of date, we'll prompt the user to pull the latest remote
     //          changes into the local secrets repo before continuing.
     //
-    let distance =
-        configure_file_distance_behind_secrets_repo(&configuration, &configuration.branch);
-    if distance > 0 {
+    let distance = secrets_repo.commits_ahead_of_configuration(&configuration);
+    debug!(
+        "The project is {:} commit(s) behind the latest secrets",
+        distance
+    );
+
+    // Update the pinned hash when nothing has changed – this helps fill in the blanks when creating a `.configure` file by hand
+    if distance == 0 {
+        let latest_commit_hash = secrets_repo
+            .latest_remote_hash_for_branch(&configuration.branch)
+            .expect("Unable to fetch latest commit hash");
+        configuration.pinned_hash = latest_commit_hash;
+    } else {
         let message = format!(
-            "This project is {:?} commit(s) behind the latest secrets. Would you like to use the latest secrets?",
+            "This project is {:} commit(s) behind the latest secrets. Would you like to use the latest secrets?",
             distance
         );
 
-        // Prompt to update to most recent secrets data in the branch
-        if interactive && confirm(&message) {
-            let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
+        // Prompt to update to most recent secrets data in the branch (if we're in interactive mode – if not, just do it)
+        if !interactive || confirm(&message) {
+            let latest_commit_hash = secrets_repo
+                .latest_remote_hash_for_branch(&configuration.branch)
                 .expect("Unable to fetch latest commit hash");
 
             debug!(
-                "Moving the repo to {:?} at {:?}",
+                "Moving the secrets repo to {:?} at {:?}",
                 &configuration.branch, latest_commit_hash
             );
 
-            check_out_branch_at_revision(&configuration.branch, &latest_commit_hash)
+            secrets_repo
+                .switch_to_branch_at_revision(&configuration.branch, &latest_commit_hash)
                 .expect("Unable to check out branch at revision");
+
+            // Update the pinned hash in `.configure` file before continuing
+            debug!(
+                "Updating the .configure file pinned hash to {:?}",
+                latest_commit_hash
+            );
             configuration.pinned_hash = latest_commit_hash;
         }
-    }
-    // update the pinned hash even if nothing has changed – this helps fill in the blanks when creating a `.configure` file by hand
-    else {
-        let latest_commit_hash = get_latest_hash_for_remote_branch(&configuration.branch)
-            .expect("Unable to fetch latest commit hash");
-        configuration.pinned_hash = latest_commit_hash;
     }
 
     //
     // Step 5 – Write out encrypted files as needed
     //
-    write_configuration(&configuration).expect("Unable to save updated configuration");
+    let configure_file_path = resolve_configure_file_path(&configuration_file_path).expect("");
+    write_configuration_to(&configuration, &configure_file_path)
+        .expect("Unable to write configuration");
 
     //
     // Step 6 – Write out encrypted files as needed
@@ -278,9 +317,10 @@ pub fn update_configuration(mut configuration: Configuration, interactive: bool)
         .expect("Unable to copy encrypted files");
 
     //
-    // Step 7 – Roll everything back to how it was before we started
+    // Step 7 – Roll the secrets repo back to how it was before we started
     //
-    crate::git::check_out_branch_at_revision(&starting_branch, &starting_ref)
+    secrets_repo
+        .switch_to_branch_at_revision(&starting_branch, &starting_ref)
         .expect("Unable to roll back to branch");
 
     //
@@ -303,14 +343,16 @@ pub fn setup_configuration(mut configuration: Configuration) {
     println!("Let's get configuration set up for this project.");
     newline();
 
+    let repo = SecretsRepo::default();
+
     // Help the user set the `project_name` field
     configuration = prompt_for_project_name_if_needed(configuration);
 
     // Help the user set the `branch` field
-    configuration = prompt_for_branch(configuration, true);
+    configuration = prompt_for_branch(&repo, configuration, true);
 
     // Set the latest automatically hash based on the selected branch
-    configuration = set_latest_hash_if_needed(configuration);
+    configuration.set_pinned_hash_from_repo(&repo);
 
     // Help the user add files
     configuration = prompt_to_add_files(configuration);
@@ -337,21 +379,24 @@ fn prompt_for_project_name_if_needed(mut configuration: Configuration) -> Config
     configuration
 }
 
-fn prompt_for_branch(mut configuration: Configuration, force: bool) -> Configuration {
+fn prompt_for_branch(
+    repo: &SecretsRepo,
+    mut configuration: Configuration,
+    force: bool,
+) -> Configuration {
     // If there's already a branch set, don't bother updating it
     if !configuration.needs_branch() && !force {
         return configuration;
     }
 
-    let secrets_repo_path = find_secrets_repo();
-    let current_branch =
-        get_current_secrets_branch().expect("Unable to determine current mobile secrets branch");
-    let branches = get_secrets_branches().expect("Unable to fetch mobile secrets branches");
+    let current_branch = repo
+        .current_branch()
+        .expect("Unable to determine current mobile secrets branch");
+    let branches = repo
+        .local_branch_names()
+        .expect("Unable to fetch mobile secrets branches");
 
-    println!(
-        "We've found your mobile secrets repository at {:?}",
-        secrets_repo_path
-    );
+    println!("Using the secrets repository at {:?}", repo.path);
     newline();
     println!("Which branch would you like to use?");
     println!("Current Branch: {}", style(&current_branch).green());
@@ -361,18 +406,6 @@ fn prompt_for_branch(mut configuration: Configuration, force: bool) -> Configura
 
     configuration.branch = selected_branch.clone();
     println!("Secrets repo branch set to: {:?}", selected_branch);
-
-    configuration
-}
-
-fn set_latest_hash_if_needed(mut configuration: Configuration) -> Configuration {
-    if !configuration.needs_pinned_hash() {
-        return configuration;
-    }
-
-    let latest_hash = get_secrets_latest_hash(&configuration.branch)
-        .expect("Unable to fetch the latest secrets hash");
-    configuration.pinned_hash = latest_hash;
 
     configuration
 }
@@ -428,32 +461,6 @@ fn prompt_to_add_file() -> Option<File> {
     })
 }
 
-fn configure_file_distance_behind_secrets_repo(
-    configuration: &Configuration,
-    branch_name: &str,
-) -> i32 {
-    debug!("Checking if configure file is behind secrets repo");
-
-    let current_branch =
-        get_current_secrets_branch().expect("Unable to get current mobile secrets branch");
-    debug!("Current branch is: {:?}", current_branch);
-
-    let current_hash =
-        get_secrets_current_hash().expect("Unable to get current mobile secrets hash");
-    debug!("Current hash is: {:?}", current_hash);
-
-    check_out_branch(branch_name).expect("Unable to switch branches");
-
-    let latest_hash = get_secrets_current_hash().unwrap();
-    let distance = secrets_repo_distance_between(&configuration.pinned_hash, &latest_hash).unwrap();
-
-    // Put things back how we found them
-    crate::git::check_out_branch_at_revision(&current_branch, &current_hash)
-        .expect("Unable to roll back to branch");
-
-    distance
-}
-
 #[cfg(test)]
 mod tests {
     // Import the parent scope
@@ -470,8 +477,8 @@ mod tests {
     }
 
     #[test]
-    fn test_that_default_configuration_needs_pinned_hash() {
-        assert!(Configuration::default().needs_pinned_hash())
+    fn test_that_default_configuration_pinned_hash_is_empty() {
+        assert!(Configuration::default().pinned_hash == "")
     }
 
     #[test]
