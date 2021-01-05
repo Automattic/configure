@@ -27,10 +27,10 @@ pub fn init() {
 /// * `configuration` - The project's parsed `ConfigurationFile` object.
 /// * `interactive` - Whether to prompt the user for confirmation before performing destructive operations
 ///
-pub fn apply(interactive: bool) {
+pub fn apply(interactive: bool, configuration_file_path: Option<String>) {
     init_encryption();
-    let configuration =
-        read_configuration().expect("Unable to read configuration from `.configure` file");
+    let configuration = read_configuration_from_file(&configuration_file_path)
+        .expect("Unable to read configuration from `.configure` file");
 
     if configuration.is_empty() {
         if interactive {

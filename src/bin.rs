@@ -52,6 +52,9 @@ enum Command {
         ///
         #[structopt(short = "f", long = "force")]
         should_run_noninteractive: bool,
+
+        #[structopt(short = "c", long = "configuration-file-path")]
+        configuration_file_path: Option<String>,
     },
 
     /// Change mobile secrets settings
@@ -110,7 +113,8 @@ pub fn main() {
     match Options::from_args().command {
         Command::Apply {
             should_run_noninteractive,
-        } => configure::apply(!should_run_noninteractive),
+            configuration_file_path
+        } => configure::apply(!should_run_noninteractive, configuration_file_path),
         Command::Update {
             should_run_noninteractive,
             configuration_file_path,
