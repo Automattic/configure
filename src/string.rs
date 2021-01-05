@@ -22,8 +22,7 @@ fn index_of_string_in(string: &str, strings: &[String]) -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::string::distance_between_strings_in;
-    use crate::string::index_of_string_in;
+    use super::*;
 
     #[test]
     fn test_that_index_of_string_in_works() {

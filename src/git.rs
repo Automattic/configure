@@ -245,7 +245,7 @@ impl SecretsRepo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum RepoSyncState {
     /// The local secrets repository has commits that the server does not have
     Ahead,
@@ -257,7 +257,7 @@ pub enum RepoSyncState {
     Synced,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct RepoStatus {
     /// The local repository sync state – ahead of, behind, or in sync with the server
     pub sync_state: RepoSyncState,
@@ -285,30 +285,110 @@ impl RepoStatus {
 
         let status = std::str::from_utf8(&output.stdout).expect("Unable to read output data");
 
-        if status.contains("...") {
-            return Ok(RepoStatus::synced());
-        }
+        RepoStatus::parse_repo_status(status)
+    }
 
-        let digits = status
-            .chars()
-            .filter(|c| c.is_digit(10))
-            .collect::<String>()
-            .parse::<i32>()?;
-
+    fn parse_repo_status(status: &str) -> Result<RepoStatus, ConfigureError> {
         if status.contains("ahead") {
             return Ok(RepoStatus {
                 sync_state: RepoSyncState::Ahead,
-                distance: digits,
+                distance: RepoStatus::parse_digits_from_repo_status(&status)?,
             });
         }
 
         if status.contains("behind") {
             return Ok(RepoStatus {
                 sync_state: RepoSyncState::Behind,
-                distance: digits,
+                distance: RepoStatus::parse_digits_from_repo_status(&status)?,
             });
         }
 
+        if status.contains("...") {
+            return Ok(RepoStatus::synced());
+        }
+
         Err(ConfigureError::GitStatusUnknownError {})
+    }
+
+    fn parse_digits_from_repo_status(status: &str) -> Result<i32, ConfigureError> {
+        let digits = status
+            .chars()
+            .filter(|c| c.is_digit(10))
+            .collect::<String>()
+            .parse::<i32>()?;
+
+        Ok(digits)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_that_parse_repo_status_returns_behind_for_behind_strings() {
+        assert_eq!(
+            RepoSyncState::Behind,
+            RepoStatus::parse_repo_status("## trunk...origin/trunk [behind 1]")
+                .unwrap()
+                .sync_state
+        )
+    }
+
+    #[test]
+    fn test_that_parse_repo_status_returns_ahead_for_ahead_strings() {
+        assert_eq!(
+            RepoSyncState::Ahead,
+            RepoStatus::parse_repo_status("## trunk...origin/trunk [ahead 1]")
+                .unwrap()
+                .sync_state
+        )
+    }
+
+    #[test]
+    fn test_that_parse_repo_status_returns_synced_for_synced_strings() {
+        assert_eq!(
+            RepoSyncState::Synced,
+            RepoStatus::parse_repo_status("## trunk...origin/trunk")
+                .unwrap()
+                .sync_state
+        )
+    }
+
+    #[test]
+    fn test_that_parse_repo_status_returns_error_for_garbage_string() {
+        assert!(RepoStatus::parse_repo_status("foo").is_err())
+    }
+
+    #[test]
+    fn test_that_parse_repo_status_returns_correct_distance_for_behind_string() {
+        assert_eq!(
+            1,
+            RepoStatus::parse_repo_status("## trunk...origin/trunk [behind 1]")
+                .unwrap()
+                .distance
+        );
+        assert_eq!(
+            9321,
+            RepoStatus::parse_repo_status("## trunk...origin/trunk [behind 9321]")
+                .unwrap()
+                .distance
+        );
+    }
+
+    #[test]
+    fn test_that_parse_repo_status_returns_correct_distance_for_ahead_string() {
+        assert_eq!(
+            1,
+            RepoStatus::parse_repo_status("## trunk...origin/trunk [ahead 01]")
+                .unwrap()
+                .distance
+        );
+        assert_eq!(
+            9321,
+            RepoStatus::parse_repo_status("## trunk...origin/trunk [ahead 9321]")
+                .unwrap()
+                .distance
+        );
     }
 }
