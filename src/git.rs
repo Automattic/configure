@@ -2,6 +2,7 @@ use crate::Configuration;
 use git2::Oid;
 use git2::{BranchType, ErrorCode, Repository, ResetType};
 use crate::ConfigureError;
+use crate::string::distance_between_strings_in;
 use log::debug;
 
 pub struct SecretsRepo {
@@ -201,33 +202,10 @@ impl SecretsRepo {
 
         let hash_list = self.get_hash_list()?;
 
-        let index_of_configure_file_hash = hash_list
-            .iter()
-            .position(|r| r == hash1)
-            .unwrap_or_else(|| {
-                panic!(
-                    "The pinned hash in .configure {} doesn't exist in the repository history",
-                    &hash1
-                )
-            });
-
-        debug!("Configure file hash is at position {:}", index_of_configure_file_hash);
-
-        let index_of_latest_repo_hash = hash_list
-            .iter()
-            .position(|r| r == hash2)
-            .unwrap_or_else(|| {
-                panic!(
-                    "The provided hash {} doesn't exist in the repository history",
-                    &hash2
-                )
-            });
-
-        debug!("Latest repo hash is at position {:}", index_of_latest_repo_hash);
-
-        let distance = (index_of_latest_repo_hash as i32 - index_of_configure_file_hash as i32).abs();
-
-        Ok(distance as i32)
+        match distance_between_strings_in(hash1, hash2, &hash_list) {
+            Some(distance) => Ok(distance),
+            None => Err(ConfigureError::GitStatusUnknownError)
+        }
     }
 
     fn get_hash_list(&self) -> Result<Vec<String>, std::io::Error> {
