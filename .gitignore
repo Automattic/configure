@@ -3,3 +3,6 @@
 /target
 /.configure
 /.configure-files
+
+# Ruby Gem
+/ruby-gem/example/vendor

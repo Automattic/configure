@@ -1,0 +1,19 @@
+PATH
+  remote: ../..
+  specs:
+    libconfigure (0.3.0)
+      ffi
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    ffi (1.14.2)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  libconfigure!
+
+BUNDLED WITH
+   2.1.4
