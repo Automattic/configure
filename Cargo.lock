@@ -145,6 +145,7 @@ dependencies = [
  "dirs 3.0.1",
  "git2",
  "indicatif",
+ "libc",
  "log",
  "ring",
  "serde",
