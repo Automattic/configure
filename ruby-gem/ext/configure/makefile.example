@@ -1,0 +1,10 @@
+# A barebones makefile to trick Rubygems into continuing
+
+build:
+	true
+
+clean:
+	true
+
+install:
+	true

@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
 
   s.bindir        = 'ruby-gem/bin'
   s.executables   = ['configure_init', 'configure_apply', 'configure_update']
+  s.extensions    = ['ruby-gem/ext/configure/extconf.rb']
 
   s.add_dependency 'ffi'
 end
