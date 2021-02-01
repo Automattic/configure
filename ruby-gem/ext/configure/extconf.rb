@@ -7,13 +7,14 @@ compilationDirectory = Dir.pwd
 configureDirectory = File.dirname(File.absolute_path(__FILE__))
 bundlePath = File.join(compilationDirectory, 'configure.' + RbConfig::CONFIG['DLEXT'])
 
-puts "Downloading libconfigure"
+url = "https://github.com/Automattic/configure/releases/download/0.3.0/libconfigure.dylib"
+
+puts "Downloading libconfigure from #{url}"
 
 FileUtils.cp(configureDirectory + "/makefile.example", compilationDirectory + "/Makefile")
 
 if OS.mac? then
-	command = "curl https://github.com/Automattic/configure/releases/download/#{Configure::VERSION}/libconfigure.dylib -L --output #{bundlePath}"
-	system(command)
+	system("curl", "-L", url, "--output", bundlePath)
 else
 	puts "Unsupported Operating System"
 	exit 1

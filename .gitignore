@@ -5,4 +5,5 @@
 /.configure-files
 
 # Ruby Gem
-/ruby-gem/example/vendor
+ruby-gem/example/vendor
+libconfigure-*.gem
