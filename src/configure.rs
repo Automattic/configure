@@ -46,11 +46,11 @@ impl Configuration {
     }
 
     fn needs_project_name(&self) -> bool {
-        self.project_name == ""
+        self.project_name.is_empty()
     }
 
     fn needs_branch(&self) -> bool {
-        self.branch == ""
+        self.branch.is_empty()
     }
 }
 
@@ -129,6 +129,23 @@ pub struct File {
 
 impl File {
     pub fn get_encrypted_destination(&self) -> String {
+        // This monstrosity tries to ensure we put files in the `.configure-files` directory for temporary storage. If something goes wrong,
+        // we fall back to just putting the file where it's specified to go
+        if let Ok(project_root) = find_project_root() {
+            let destination = Path::new(&self.destination);
+            if let Some(os_file_name) = destination.file_name() {
+                if let Some(file_name) = os_file_name.to_str() {
+                    if let Some(destination) = project_root
+                        .join(".configure-files")
+                        .join(file_name.to_owned() + &".enc".to_owned())
+                        .to_str()
+                    {
+                        return destination.to_string();
+                    }
+                }
+            }
+        }
+
         self.destination.clone() + &".enc".to_owned()
     }
 
@@ -503,8 +520,41 @@ mod tests {
             destination: ".configure-files/file".to_string(),
         };
         assert_eq!(
-            file.get_encrypted_destination(),
-            ".configure-files/file.enc"
+            Path::new(&file.get_encrypted_destination())
+                .file_name()
+                .unwrap(),
+            "file.enc"
+        )
+    }
+
+    #[test]
+    fn test_that_get_encrypted_destination_with_extension_ends_in_enc_extension() {
+        let file = File {
+            source: "".to_string(),
+            destination: ".configure-files/file.txt".to_string(),
+        };
+        assert_eq!(
+            Path::new(&file.get_encrypted_destination())
+                .file_name()
+                .unwrap(),
+            "file.txt.enc"
+        )
+    }
+
+    #[test]
+    fn test_that_get_encrypted_destination_with_final_destination_outside_configurefiles_directory_is_correct(
+    ) {
+        let file = File {
+            source: "".to_string(),
+            destination: "foo/bar/file".to_string(),
+        };
+        assert_eq!(
+            Path::new(&file.get_encrypted_destination())
+                .parent()
+                .unwrap()
+                .file_name()
+                .unwrap(),
+            ".configure-files"
         )
     }
 
