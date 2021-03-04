@@ -1,6 +1,6 @@
 [package]
 name = "configure"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Jeremy Massel <jeremy.massel@automattic.com>"]
 edition = "2018"
 
