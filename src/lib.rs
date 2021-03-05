@@ -134,3 +134,4 @@ fn init_encryption() {
 
 const SECRETS_KEY_NAME: &str = "SECRETS_REPO";
 const ENCRYPTION_KEY_NAME: &str = "CONFIGURE_ENCRYPTION_KEY";
+const TEMP_ENCRYPTION_KEY_NAME: &str = "CONFIGURE_ENCRYPTION_KEY_TEMP"; // Useful when switching between versions of the plugin

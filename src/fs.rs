@@ -229,9 +229,18 @@ pub fn decrypt_files_for_configuration(
     let encryption_key;
 
     // Allow defining an environment variable that can override the key selection (for use in CI, for example).
-    // This is placed here instead of in `read_encryption_key` because it isa security risk to allow this override for
+    // This is placed here and not resued when encrypting files because it is a security risk to allow this override for
     // encryption – someone might set the encryption key on their local machine, causing every project to silently use the same key.
-    if let Ok(var) = env::var(crate::ENCRYPTION_KEY_NAME) {
+    //
+    // We also have two sets of environment variables we accept – this makes it easier to transition between versions of the `configure` tool in production.
+    // We check the temporary variable first, because it should override the permanent one when both are present
+    if let Ok(var) = env::var(crate::TEMP_ENCRYPTION_KEY_NAME) {
+        println!(
+            "Found an environment variable named {:}. Using its value as the encryption key",
+            crate::TEMP_ENCRYPTION_KEY_NAME
+        );
+        encryption_key = var;
+    } else if let Ok(var) = env::var(crate::ENCRYPTION_KEY_NAME) {
         println!(
             "Found an environment variable named {:}. Using its value as the encryption key",
             crate::ENCRYPTION_KEY_NAME
