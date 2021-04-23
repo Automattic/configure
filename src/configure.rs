@@ -46,11 +46,11 @@ impl Configuration {
     }
 
     fn needs_project_name(&self) -> bool {
-        self.project_name == ""
+        self.project_name.is_empty()
     }
 
     fn needs_branch(&self) -> bool {
-        self.branch == ""
+        self.branch.is_empty()
     }
 }
 
