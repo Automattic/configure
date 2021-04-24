@@ -19,7 +19,7 @@ Gem::Specification.new do |s|
     'configure_update',
   ]
 
-  s.files         = [
+  s.files = [
     'configure.rb',
     'version.rb',
     'bin/libconfigure.dylib', # the macOS binary library
