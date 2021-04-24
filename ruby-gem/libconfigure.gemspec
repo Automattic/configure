@@ -1,4 +1,4 @@
-require_relative 'ruby-gem/version'
+require_relative 'version'
 
 Gem::Specification.new do |s|
   s.name        = 'libconfigure'
@@ -7,22 +7,23 @@ Gem::Specification.new do |s|
   s.summary     = "A lightweight native-backed tool for working with configuration files"
   s.authors     = ["automattic"]
   s.email       = 'mobile@automattic.com'
-  s.files       = ["ruby-gem/configure.rb"]
   s.homepage    = 'https://rubygems.org/gems/libconfigure'
   s.license     = 'MIT'
 
-  s.require_paths = ["ruby-gem"]
+  s.require_paths = ['.']
 
-  s.bindir        = 'ruby-gem/bin'
+  s.bindir        = 'bin'
   s.executables   = [
     'configure_init',
     'configure_apply',
     'configure_update',
   ]
+
   s.files         = [
-    'ruby-gem/configure.rb',
-    'ruby-gem/version.rb',
-    'ruby-gem/bin/libconfigure.dylib',
+    'configure.rb',
+    'version.rb',
+    'bin/libconfigure.dylib', # the macOS binary library
   ]
+
   s.add_dependency('ffi', '~> 1.0')
 end
