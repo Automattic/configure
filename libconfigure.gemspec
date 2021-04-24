@@ -14,8 +14,15 @@ Gem::Specification.new do |s|
   s.require_paths = ["ruby-gem"]
 
   s.bindir        = 'ruby-gem/bin'
-  s.executables   = ['configure_init', 'configure_apply', 'configure_update']
-  s.extensions    = ['ruby-gem/ext/configure/extconf.rb']
-
+  s.executables   = [
+    'configure_init',
+    'configure_apply',
+    'configure_update',
+  ]
+  s.files         = [
+    'ruby-gem/configure.rb',
+    'ruby-gem/version.rb',
+    'ruby-gem/bin/libconfigure.dylib',
+  ]
   s.add_dependency('ffi', '~> 1.0')
 end

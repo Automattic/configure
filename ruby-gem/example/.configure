@@ -4,8 +4,8 @@
   "pinned_hash": "ff493804e19f45c0377415cb46c79c1ace94eb46",
   "files_to_copy": [
     {
-      "file": "iOS/WPiOS/wpcom_app_credentials",
-      "destination": ".configure-files/wpcom_app_credentials"
+      "file": "android/FluxC/README.md",
+      "destination": ".configure-files/README.md"
     }
   ]
 }

@@ -7,3 +7,6 @@
 # Ruby Gem
 ruby-gem/example/vendor
 libconfigure-*.gem
+
+# Ruby Gem Binaries
+ruby-gem/bin/lib*
