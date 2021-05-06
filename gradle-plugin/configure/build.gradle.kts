@@ -1,28 +1,13 @@
-import com.novoda.gradle.release.PublishExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 /// The plugin version number – change this to match whatever your tag will be
 version = "0.5.0"
 group = "com.automattic.android"
 
-buildscript {
-    repositories {
-        jcenter()
-        maven {
-            setUrl("https://plugins.gradle.org/m2/")
-        }
-    }
-    dependencies {
-        classpath("com.novoda", "bintray-release", "0.9.2")
-    }
-}
-
 plugins {
     `kotlin-dsl`
     id("com.github.gmazzo.buildconfig") version "2.0.2"
 }
-
-apply(null, "com.novoda.bintray-release")
 
 repositories {
     jcenter()
@@ -52,22 +37,6 @@ gradlePlugin {
             implementationClass = "com.automattic.android.configure.ConfigurePlugin"
         }
     }
-}
-
-/// Register the plugin's maven configuration for upload
-configure<PublishExtension> {
-    userOrg = "automattic"
-    groupId = "com.automattic.android"
-    artifactId = "configure"
-    publishVersion = "${version}"
-    desc = "A lightweight tool for working with configuration files"
-    website = "https://github.com/automattic/configure"
-
-    dryRun = false
-    autoPublish = true
-
-    bintrayUser = System.getenv("BINTRAY_USER")
-    bintrayKey = System.getenv("BINTRAY_KEY")
 }
 
 /// Set build configuration constants for use at runtime
