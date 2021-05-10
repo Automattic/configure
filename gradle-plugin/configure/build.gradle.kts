@@ -4,10 +4,21 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 version = "0.5.0"
 group = "com.automattic.android"
 
+buildscript {
+    repositories {
+        maven { url = uri("https://a8c-libs.s3.amazonaws.com/android") }
+    }
+    dependencies {
+        classpath("com.automattic.android:publish-to-s3:0.3")
+    }
+}
+
 plugins {
     `kotlin-dsl`
     id("com.github.gmazzo.buildconfig") version "2.0.2"
 }
+
+apply(plugin = "com.automattic.android.publish-plugin-to-s3")
 
 repositories {
     jcenter()
