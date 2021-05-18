@@ -4,6 +4,7 @@ require 'ffi'
 
 BINARY_MISSING_MESSAGE = 'The binary could not be found – run `cargo build` in the `configure` project root to build it'
 
+# A wrapper for the `libconfigure` Rust library
 module Configure
   extend FFI::Library
 

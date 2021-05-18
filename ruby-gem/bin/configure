@@ -2,35 +2,35 @@
 # frozen_string_literal: true
 
 lib_path = File.expand_path('../lib', __dir__)
-$:.unshift(lib_path) if !$:.include?(lib_path)
+$LOAD_PATH.unshift(lib_path) unless $LOAD_PATH.include?(lib_path)
 require 'configure'
 
 def help
-	puts <<~HELP
-		configure
-		A command-line utility for applying configuration secrets with strong encryption
+  puts <<~HELP
+    configure
+    A command-line utility for applying configuration secrets with strong encryption
 
-		USAGE:
-		bundle exec configure <SUBCOMMAND>
+    USAGE:
+    bundle exec configure <SUBCOMMAND>
 
-		SUBCOMMANDS:
-		init          Change mobile secrets settings
-		apply         Decrypt the current mobile secrets for this project
-		update        Update this project's encrypted mobile secrets to the latest version
-		help          Prints this message
+    SUBCOMMANDS:
+    init          Change mobile secrets settings
+    apply         Decrypt the current mobile secrets for this project
+    update        Update this project's encrypted mobile secrets to the latest version
+    help          Prints this message
 
-	HELP
+  HELP
 end
 
 case ARGV.first
 when 'init'
-  Configure.init()
+  Configure.init
 when 'apply'
   Configure.apply(true, File.expand_path('.configure', Dir.pwd))
 when 'update'
   Configure.update(true, File.expand_path('.configure', Dir.pwd))
 when nil, 'help'
-  help()
+  help
 else
   puts "Unknown subcommand #{ARGV.first}."
   exit 1
