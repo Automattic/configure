@@ -14,10 +14,7 @@ pub fn distance_between_strings_in(
 }
 
 fn index_of_string_in(string: &str, strings: &[String]) -> Option<i32> {
-    match strings.iter().position(|r| r == string) {
-        Some(ix) => Some(ix as i32),
-        None => None,
-    }
+    strings.iter().position(|r| r == string).map(|ix| ix as i32)
 }
 
 #[cfg(test)]
