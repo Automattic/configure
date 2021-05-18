@@ -15,7 +15,7 @@ module Configure
   if is_development_environment
     puts 'In development mode'
     lib_name = File.join(File.dirname(File.expand_path(__dir__)), 'target', 'debug', 'libconfigure.dylib')
-    puts "Using binary at #{lib_name}"
+    puts "Looking for binary at #{lib_name}"
     abort(BINARY_MISSING_MESSAGE) unless File.exist?(lib_name)
     puts 'Binary is present'
   end
