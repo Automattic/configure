@@ -145,13 +145,29 @@ jobs:
     needs: [windows,linux,mac]
     steps:
       - uses: actions/checkout@v2
+      - uses: kceb/pull-request-url-action@v1
+        id: pr-url
       - name: Release
         run: |
           cd gradle-plugin
-          ./gradlew bintrayUpload
+
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          BRANCH=${GITHUB_REF#refs/heads/}
+          PULL_REQUEST_URL=${{ steps.pr-url.outputs.url }}
+
+          echo "Environment:"
+          echo "> SHA1: $GITHUB_SHA"
+          echo "> tag?: $TAG_NAME"
+          echo "> branch?: $BRANCH"
+          echo "> PR?: $PULL_REQUEST_URL"
+
+          PARAMS=(--sha1=$GITHUB_SHA)
+          [[ -n "$TAG_NAME" ]] && PARAMS+=(--tag-name=$TAG_NAME)
+          [[ -n "$BRANCH" ]] && PARAMS+=(--branch-name=$BRANCH)
+          [[ -n "$PULL_REQUEST_URL" ]] && PARAMS+=(--pull-request-url=$PULL_REQUEST_URL)
+
+          ./gradlew :configure:publishPluginToS3 "${PARAMS[@]}"
         env:
-          BINTRAY_USER: ${{ secrets.BINTRAY_USER }}
-          BINTRAY_KEY: ${{ secrets.BINTRAY_KEY }}
-
-
+          AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+          AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
 
