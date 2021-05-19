@@ -9,7 +9,7 @@ buildscript {
         maven { url = uri("https://a8c-libs.s3.amazonaws.com/android") }
     }
     dependencies {
-        classpath("com.automattic.android:publish-to-s3:0.3")
+        classpath("com.automattic.android:publish-to-s3:0.3.1")
     }
 }
 
@@ -19,6 +19,10 @@ plugins {
 }
 
 apply(plugin = "com.automattic.android.publish-plugin-to-s3")
+configure<com.automattic.android.publish.PublishPluginToS3Extension> {
+    groupId = "com.automattic"
+    artifactId = "configure"
+}
 
 repositories {
     jcenter()
