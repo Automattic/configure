@@ -11,7 +11,7 @@ def help
     A command-line utility for applying configuration secrets with strong encryption
 
     USAGE:
-    bundle exec configure <SUBCOMMAND>
+    configure <SUBCOMMAND>
 
     SUBCOMMANDS:
     init          Change mobile secrets settings
