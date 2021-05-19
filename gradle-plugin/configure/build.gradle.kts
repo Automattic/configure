@@ -1,9 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
-/// The plugin version number – change this to match whatever your tag will be
-version = "0.6.0"
-group = "com.automattic.android"
-
 buildscript {
     repositories {
         maven { url = uri("https://a8c-libs.s3.amazonaws.com/android") }
