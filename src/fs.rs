@@ -143,7 +143,7 @@ pub fn write_configuration(configuration: &Configuration) -> Result<(), Configur
 
 pub fn write_configuration_to(
     configuration: &Configuration,
-    configure_file: &PathBuf,
+    configure_file: &Path,
 ) -> Result<(), ConfigureError> {
     let serialized = configuration.to_string()?;
 
@@ -190,7 +190,7 @@ pub fn encryption_key_for_configuration(
     }
 }
 
-fn read_keys(source: &PathBuf) -> Result<HashMap<String, String>, ConfigureError> {
+fn read_keys(source: &Path) -> Result<HashMap<String, String>, ConfigureError> {
     let file = match File::open(&source) {
         Ok(file) => file,
         Err(_) => return Err(ConfigureError::KeysFileNotReadable),
@@ -204,7 +204,7 @@ fn read_keys(source: &PathBuf) -> Result<HashMap<String, String>, ConfigureError
     Ok(map)
 }
 
-fn save_keys(destination: &PathBuf, keys: &HashMap<String, String>) -> Result<(), ConfigureError> {
+fn save_keys(destination: &Path, keys: &HashMap<String, String>) -> Result<(), ConfigureError> {
     let json = match serde_json::to_string_pretty(&keys) {
         Ok(json) => json,
         Err(_) => return Err(ConfigureError::KeysDataIsNotValid),
@@ -333,7 +333,7 @@ pub fn write_encrypted_files_for_configuration(
 }
 
 /// Returns the SHA-256 hash of a file at the given path
-fn hash_file(path: &PathBuf) -> Result<String, Error> {
+fn hash_file(path: &Path) -> Result<String, Error> {
     let input = File::open(path)?;
     let mut reader = BufReader::new(input);
     let mut context = Context::new(&SHA256);
@@ -352,13 +352,13 @@ fn hash_file(path: &PathBuf) -> Result<String, Error> {
     Ok(base64::encode(digest.as_ref()))
 }
 
-fn create_parent_directory_for_path_if_not_exists(path: &PathBuf) -> Result<(), Error> {
+fn create_parent_directory_for_path_if_not_exists(path: &Path) -> Result<(), Error> {
     let parent = match path.parent() {
         Some(parent) => parent,
         None => return Ok(()), // if we're in the root of the filesystem, we have no work to do
     };
 
-    Ok(create_dir_all(parent)?)
+    create_dir_all(parent)
 }
 
 #[cfg(test)]

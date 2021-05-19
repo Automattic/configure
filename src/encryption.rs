@@ -4,7 +4,7 @@ use sodiumoxide::base64::{decode, encode};
 use sodiumoxide::crypto::secretbox;
 use std::fs::{read, write};
 use std::io::{Error, ErrorKind};
-use std::path::PathBuf;
+use std::path::Path;
 
 pub fn init() {
     sodiumoxide::init().expect("Unable to initialize libsodium");
@@ -17,8 +17,8 @@ pub fn generate_key() -> String {
 }
 
 pub fn encrypt_file(
-    input_path: &PathBuf,
-    output_path: &PathBuf,
+    input_path: &Path,
+    output_path: &Path,
     secret: &str,
 ) -> Result<(), std::io::Error> {
     let content = read(input_path)?;
@@ -29,8 +29,8 @@ pub fn encrypt_file(
 }
 
 pub fn decrypt_file(
-    input_path: &PathBuf,
-    output_path: &PathBuf,
+    input_path: &Path,
+    output_path: &Path,
     secret: &str,
 ) -> Result<(), std::io::Error> {
     let content = read(input_path)?;
@@ -65,7 +65,7 @@ fn decrypt_bytes(input: Vec<u8>, key: sodiumoxide::crypto::secretbox::Key) -> Re
     // Read the encrypted data bytes
     let data_bytes = &input[NONCE_SIZE..];
 
-    Ok(secretbox::open(&data_bytes, &nonce, &key)?)
+    secretbox::open(&data_bytes, &nonce, &key)
 }
 
 fn encode_key(key: sodiumoxide::crypto::secretbox::Key) -> String {

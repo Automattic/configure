@@ -7,6 +7,7 @@ edition = "2018"
 [lib]
 name = "configure"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib", "staticlib"]
 
 [[bin]]
 name = "configure"
@@ -19,6 +20,7 @@ codegen-units = 1
 
 [dependencies]
 log = "0.4.0"
+libc = "0.2"
 dirs = "3.0.1"
 simplelog = "^0.7.6"
 sodiumoxide = "0.2.6"
