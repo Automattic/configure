@@ -8,7 +8,6 @@ import java.net.URL
 import java.nio.file.Path
 import java.nio.file.Paths
 
-
 object ConfigureHelpers {
 
     val configureRootPath: Path = Paths.get(System.getProperty("user.dir")).resolve("vendor").resolve("configure")

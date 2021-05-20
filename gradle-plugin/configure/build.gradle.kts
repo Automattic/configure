@@ -1,5 +1,9 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
+/// The plugin version number – change this to match whatever your tag will be
+group = "com.automattic.android"
+version = "0.5.0"
+
 buildscript {
     repositories {
         maven { url = uri("https://a8c-libs.s3.amazonaws.com/android") }
@@ -11,7 +15,7 @@ buildscript {
 
 plugins {
     `kotlin-dsl`
-    id("com.github.gmazzo.buildconfig") version "2.0.2"
+    id("com.github.gmazzo.buildconfig") version "3.0.0"
 }
 
 apply(plugin = "com.automattic.android.publish-plugin-to-s3")
