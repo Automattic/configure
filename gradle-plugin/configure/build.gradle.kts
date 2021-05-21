@@ -20,7 +20,7 @@ plugins {
 
 apply(plugin = "com.automattic.android.publish-plugin-to-s3")
 configure<com.automattic.android.publish.PublishPluginToS3Extension> {
-    groupId = "com.automattic"
+    groupId = "com.automattic.android"
     artifactId = "configure"
 }
 
