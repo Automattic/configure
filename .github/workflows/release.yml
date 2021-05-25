@@ -148,10 +148,9 @@ jobs:
       - name: Release
         run: |
           cd gradle-plugin
-          ./gradlew bintrayUpload
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+
+          ./gradlew :configure:publishPluginToS3 --tag-name=$TAG_NAME
         env:
-          BINTRAY_USER: ${{ secrets.BINTRAY_USER }}
-          BINTRAY_KEY: ${{ secrets.BINTRAY_KEY }}
-
-
-
+          AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+          AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
