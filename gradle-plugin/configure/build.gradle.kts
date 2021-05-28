@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 /// The plugin version number – change this to match whatever your tag will be
 group = "com.automattic.android"
-version = "0.6.0"
+version = "0.6.1"
 
 buildscript {
     repositories {
@@ -26,6 +26,11 @@ configure<com.automattic.android.publish.PublishPluginToS3Extension> {
 
 repositories {
     jcenter()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 /// Don't allow warnings in the project – this can prevent us from shipping a broken build
