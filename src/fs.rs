@@ -1,3 +1,4 @@
+use crate::EncryptionKey;
 use crate::encryption::{decrypt_file, encrypt_file, generate_key};
 use crate::Configuration;
 use crate::ConfigureError;
@@ -116,7 +117,7 @@ pub fn resolve_configure_file_path(
 pub fn read_configuration_from_file(
     configure_file_path: &Option<String>,
 ) -> Result<Configuration, ConfigureError> {
-    let configure_file_path = resolve_configure_file_path(&configure_file_path)?;
+    let configure_file_path = resolve_configure_file_path(configure_file_path)?;
 
     if !configure_file_path.is_file() {
         return Err(ConfigureError::ConfigureFileNotReadable);
@@ -163,7 +164,7 @@ pub fn write_configuration_to(
 pub fn generate_encryption_key_if_needed(
     configuration: &Configuration,
 ) -> Result<(), ConfigureError> {
-    if encryption_key_for_configuration(&configuration).is_ok() {
+    if encryption_key_for_configuration(configuration).is_ok() {
         return Ok(());
     }
 
@@ -177,17 +178,20 @@ pub fn generate_encryption_key_if_needed(
 
 pub fn encryption_key_for_configuration(
     configuration: &Configuration,
-) -> Result<String, ConfigureError> {
+) -> Result<EncryptionKey, ConfigureError> {
     let keys_file_path = find_keys_file()?;
 
     debug!("Reading keys from {:?}", keys_file_path);
 
     let keys = read_keys(&keys_file_path)?;
 
-    match keys.get(&configuration.project_name) {
-        Some(key) => Ok(key.to_string()),
-        None => Err(ConfigureError::MissingProjectKey),
-    }
+    // This is the first key that matches in the `keys.json` file
+    let key = match keys.get(&configuration.project_name) {
+        Some(key) => key,
+        None => return Err(ConfigureError::MissingProjectKey),
+    };
+
+    EncryptionKey::from_str(key)
 }
 
 fn read_keys(source: &Path) -> Result<HashMap<String, String>, ConfigureError> {
@@ -226,7 +230,7 @@ pub fn decrypt_files_for_configuration(
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root()?;
 
-    let encryption_key;
+    let encryption_key: EncryptionKey;
 
     // Allow defining an environment variable that can override the key selection (for use in CI, for example).
     // This is placed here and not resued when encrypting files because it is a security risk to allow this override for
@@ -239,18 +243,17 @@ pub fn decrypt_files_for_configuration(
             "Found an environment variable named {:}. Using its value as the encryption key",
             crate::TEMP_ENCRYPTION_KEY_NAME
         );
-        encryption_key = var;
+        encryption_key = EncryptionKey::from_str(&var)?;
     } else if let Ok(var) = env::var(crate::ENCRYPTION_KEY_NAME) {
         println!(
             "Found an environment variable named {:}. Using its value as the encryption key",
             crate::ENCRYPTION_KEY_NAME
         );
-        encryption_key = var;
+        encryption_key = EncryptionKey::from_str(&var)?;
     } else if let Ok(var) = encryption_key_for_configuration(configuration) {
         encryption_key = var;
     } else {
-        println!("Unable to locate an encryption key. Exiting");
-        std::process::exit(1);
+        return Err(ConfigureError::MissingDecryptionKey);
     }
 
     for file in &configuration.files_to_copy {
@@ -312,7 +315,7 @@ pub fn decrypt_files_for_configuration(
 
 pub fn write_encrypted_files_for_configuration(
     configuration: &Configuration,
-    encryption_key: String,
+    encryption_key: EncryptionKey,
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root()?;
     let secrets_root = find_secrets_repo()?;
@@ -329,7 +332,7 @@ pub fn write_encrypted_files_for_configuration(
             source, destination
         );
 
-        encrypt_file(&source, &destination, &encryption_key)?;
+        encrypt_file(source, &destination, &encryption_key)?;
     }
 
     Ok(())

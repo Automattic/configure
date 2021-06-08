@@ -5,7 +5,7 @@ mod git;
 mod string;
 mod ui;
 
-use crate::encryption::encryption_key_is_valid;
+use crate::encryption::EncryptionKey;
 use crate::configure::*;
 use crate::fs::*;
 use crate::ui::prompt;
@@ -189,13 +189,16 @@ pub fn find_configuration_file() -> String {
     }
 }
 
-#[no_mangle]
 pub fn encrypt_single_file(input_file: &str, output_file: &str) {
-    let mut encryption_key = prompt("Enter the encryption key you'd like to use to encrypt this file (or leave blank to generate a new one)");
+    let encryption_key_string = prompt("Enter the encryption key you'd like to use to encrypt this file (or leave blank to generate a new one)");
 
-    if !encryption_key_is_valid(&encryption_key) {
-        encryption_key = encryption::generate_key();
-    }
+    let encryption_key = match EncryptionKey::from_str(&encryption_key_string) {
+        Ok(encryption_key) => encryption_key,
+        Err(err)           => {
+            println!("{:?}", err);
+            std::process::exit(err as i32);
+        }
+    };
 
     encryption::encrypt_file(
         Path::new(input_file),
@@ -207,19 +210,21 @@ pub fn encrypt_single_file(input_file: &str, output_file: &str) {
 
 #[no_mangle]
 pub fn decrypt_single_file(input_file: &str, output_file: &str) {
-    let encryption_key = prompt("Enter the encryption key used to encrypt this file");
+    let encryption_key_string = prompt("Enter the encryption key used to encrypt this file");
 
-    if !encryption_key_is_valid(&encryption_key) {
-        println!("Invalid Encryption Key");
-        std::process::exit(1);
+    match EncryptionKey::from_str(&encryption_key_string) {
+        Ok(encryption_key) => {
+            encryption::decrypt_file(
+                Path::new(input_file),
+                Path::new(output_file),
+                &encryption_key
+            ).expect("Unable to decrypt file");
+        },
+        Err(err)           => {
+            println!("{:?}", err);
+            std::process::exit(err as i32);
+        }
     }
-
-    encryption::decrypt_file(
-        Path::new(input_file),
-        Path::new(output_file),
-        &encryption_key,
-    )
-    .expect("Unable to encrypt file");
 }
 
 fn init_encryption() {

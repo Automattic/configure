@@ -4,7 +4,6 @@ use sodiumoxide::base64::Variant;
 use sodiumoxide::base64::{decode, encode};
 use sodiumoxide::crypto::secretbox;
 use std::fs::{read, write};
-use std::io::{Error, ErrorKind};
 use std::path::Path;
 
 pub fn init() {
@@ -20,40 +19,53 @@ pub fn generate_key() -> String {
 pub fn encrypt_file(
     input_path: &Path,
     output_path: &Path,
-    secret: &str,
-) -> Result<(), std::io::Error> {
-    let content = read(input_path)?;
-    let ciphertext = encrypt_bytes(content, decode_key(secret));
-    write(&output_path, &ciphertext)?;
+    key: &EncryptionKey
+) -> Result<(), ConfigureError> {
+    let file_contents = match read(input_path) {
+        Ok(file_contents) => file_contents,
+        Err(_err) => return Err(ConfigureError::InputFileNotReadable)
+    };
 
-    Ok(())
+    let encrypted_bytes = match encrypt_bytes(file_contents, key) {
+        Ok(encrypted_bytes) => encrypted_bytes,
+        Err(_err)           => return Err(ConfigureError::DataEncryptionError)
+    };
+
+    match write(&output_path, encrypted_bytes) {
+        Ok(()) => Ok(()),
+        Err(_err) => Err(ConfigureError::OutputFileNotWritable)
+    }
 }
 
 pub fn decrypt_file(
     input_path: &Path,
     output_path: &Path,
-    secret: &str,
-) -> Result<(), std::io::Error> {
-    let content = read(input_path)?;
+    key: &EncryptionKey
+) -> Result<(), ConfigureError> {
+    let file_contents = match read(input_path) {
+        Ok(file_contents) => file_contents,
+        Err(_err) => return Err(ConfigureError::InputFileNotReadable)
+    };
 
-    match decrypt_bytes(content, decode_key(secret)) {
-        Ok(decrypted_bytes) => Ok(write(&output_path, decrypted_bytes)?),
-        Err(_err) => Err(Error::new(ErrorKind::InvalidData, "Unable to decrypt file")),
+    let decrypted_bytes = match decrypt_bytes(file_contents, key) {
+        Ok(decrypted_bytes) => decrypted_bytes,
+        Err(_err) => return Err(ConfigureError::DataDecryptionError),
+    };
+
+    match write(&output_path, decrypted_bytes) {
+        Ok(()) => Ok(()),
+        Err(_err) => Err(ConfigureError::OutputFileNotWritable)
     }
 }
 
-/// Determine whether the given `key` is a valid encryption key for use with this version of the `configure `tool
-pub fn encryption_key_is_valid(key: &str) -> bool {
-    decode_key_with_error(key).is_ok()
-}
-
-fn encrypt_bytes(input: Vec<u8>, key: sodiumoxide::crypto::secretbox::Key) -> Vec<u8> {
+fn encrypt_bytes(input: Vec<u8>, key: &EncryptionKey) -> Result<Vec<u8>, ConfigureError> {
     let nonce = secretbox::gen_nonce();
-    let secret_bytes = secretbox::seal(&input, &nonce, &key);
-    [&nonce[..], &secret_bytes].concat()
+    let secret_bytes = secretbox::seal(&input, &nonce, &key.key);
+
+    Ok([&nonce[..], &secret_bytes].concat())
 }
 
-fn decrypt_bytes(input: Vec<u8>, key: sodiumoxide::crypto::secretbox::Key) -> Result<Vec<u8>, ()> {
+fn decrypt_bytes(input: Vec<u8>, key: &EncryptionKey) -> Result<Vec<u8>, ConfigureError> {
     // Encoded Format byte layout:
     // |======================================|=====================================|
     // | 0                                 23 | 24                                ∞ |
@@ -71,18 +83,19 @@ fn decrypt_bytes(input: Vec<u8>, key: sodiumoxide::crypto::secretbox::Key) -> Re
     // Read the encrypted data bytes
     let data_bytes = &input[NONCE_SIZE..];
 
-    secretbox::open(&data_bytes, &nonce, &key)
+    let decrypted_bytes = match secretbox::open(data_bytes, &nonce, &key.key) {
+        Ok(decrypted_bytes) => decrypted_bytes,
+        Err(_)              => return Err(ConfigureError::DataDecryptionError),
+    };
+
+    Ok(decrypted_bytes)
 }
 
 fn encode_key(key: sodiumoxide::crypto::secretbox::Key) -> String {
     encode(&key, Variant::Original)
 }
 
-fn decode_key(key: &str) -> sodiumoxide::crypto::secretbox::Key {
-    decode_key_with_error(key).expect("Unable to decode key")
-}
-
-fn decode_key_with_error(key: &str) -> Result<sodiumoxide::crypto::secretbox::Key, ConfigureError> {
+fn decode_key(key: &str) -> Result<EncryptionKey, ConfigureError> {
     match decode(key.trim(), Variant::Original) {
         Ok(decoded_key) => {
             if decoded_key.len() != 32 {
@@ -91,10 +104,36 @@ fn decode_key_with_error(key: &str) -> Result<sodiumoxide::crypto::secretbox::Ke
 
             let mut key_bytes: [u8; 32] = Default::default();
             key_bytes.copy_from_slice(&decoded_key);
+            let raw_key = sodiumoxide::crypto::secretbox::Key(key_bytes);
 
-            Ok(sodiumoxide::crypto::secretbox::Key(key_bytes))
+            Ok(EncryptionKey {
+                key: raw_key
+            })
         }
         Err(_err) => Err(ConfigureError::DecryptionKeyEncodingError),
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct EncryptionKey {
+    pub key: sodiumoxide::crypto::secretbox::Key
+}
+
+impl From<sodiumoxide::crypto::secretbox::Key> for EncryptionKey {
+    fn from(raw_key: sodiumoxide::crypto::secretbox::Key) -> EncryptionKey {
+        EncryptionKey {
+            key: raw_key
+        }
+    }
+}
+
+impl EncryptionKey {
+
+    pub fn from_str(encryption_key: &str) -> Result<EncryptionKey, ConfigureError> {
+        match decode_key(encryption_key) {
+            Ok(encryption_key) => Ok(encryption_key as EncryptionKey),
+            Err(err) => Err(err)
+        }
     }
 }
 
@@ -104,27 +143,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_that_decode_key_with_error_succeeds_for_valid_key() {
-        assert!(decode_key_with_error("B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o=").is_ok())
+    fn test_that_decode_key_succeeds_for_valid_key() {
+        assert!(decode_key("B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o=").is_ok())
     }
 
     #[test]
-    fn test_that_decode_key_with_error_does_not_fail_for_trailing_whitespace() {
-        assert!(decode_key_with_error("B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o= ").is_ok())
+    fn test_that_decode_key_does_not_fail_for_trailing_whitespace() {
+        assert!(decode_key("B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o= ").is_ok())
     }
 
     #[test]
-    fn test_that_decode_key_with_error_does_not_fail_for_leading_whitespace() {
-        assert!(decode_key_with_error(" B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o=").is_ok())
+    fn test_that_decode_key_does_not_fail_for_leading_whitespace() {
+        assert!(decode_key(" B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o=").is_ok())
     }
 
     #[test]
-    fn test_that_decode_key_with_error_fails_for_invalid_base64() {
-        assert!(decode_key_with_error("Invalid base64").is_err())
+    fn test_that_decode_key_fails_for_invalid_base64() {
+        assert!(decode_key("Invalid base64").is_err())
     }
 
     #[test]
-    fn test_that_decode_key_with_error_fails_for_invalid_sodium_key() {
-        assert!(decode_key_with_error("dGhpcyBpcyBhIHRlc3Q=").is_err())
+    fn test_that_decode_key_returns_exit_code_20() {
+        assert_eq!(decode_key("Invalid base64").unwrap_err() as i32, 19);
+    }
+
+    #[test]
+    fn test_that_decode_key_fails_for_invalid_sodium_key() {
+        assert!(decode_key("dGhpcyBpcyBhIHRlc3Q=").is_err())
+    }
+
+    #[test]
+    fn test_that_decode_key_returns_exit_code_19() {
+        assert_eq!(decode_key("dGhpcyBpcyBhIHRlc3Q=").unwrap_err() as i32, 20)
     }
 }
