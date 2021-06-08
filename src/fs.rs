@@ -1,7 +1,7 @@
-use crate::EncryptionKey;
 use crate::encryption::{decrypt_file, encrypt_file, generate_key};
 use crate::Configuration;
 use crate::ConfigureError;
+use crate::EncryptionKey;
 use log::{debug, info};
 use ring::digest::{Context, SHA256};
 
@@ -171,7 +171,10 @@ pub fn generate_encryption_key_if_needed(
     let keys_file_path = find_keys_file()?;
 
     let mut keys = read_keys(&keys_file_path)?;
-    keys.insert(configuration.project_name.to_string(), generate_key());
+    keys.insert(
+        configuration.project_name.to_string(),
+        generate_key().to_string(),
+    );
 
     save_keys(&keys_file_path, &keys)
 }

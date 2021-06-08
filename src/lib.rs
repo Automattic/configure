@@ -5,8 +5,8 @@ mod git;
 mod string;
 mod ui;
 
-use crate::encryption::EncryptionKey;
 use crate::configure::*;
+use crate::encryption::EncryptionKey;
 use crate::fs::*;
 use crate::ui::prompt;
 use libc::c_char;
@@ -174,7 +174,7 @@ pub fn validate() {
 /// The encryption key will be written to the `keys.json` file at the root of your local secrets repository. You will need to commit this change yourself.
 #[no_mangle]
 pub fn generate_encryption_key() -> String {
-    crate::encryption::generate_key()
+    crate::encryption::generate_key().to_string()
 }
 
 /// Finds the `.configure` file in the current project and returns a string containing it.
@@ -194,7 +194,7 @@ pub fn encrypt_single_file(input_file: &str, output_file: &str) {
 
     let encryption_key = match EncryptionKey::from_str(&encryption_key_string) {
         Ok(encryption_key) => encryption_key,
-        Err(err)           => {
+        Err(err) => {
             println!("{:?}", err);
             std::process::exit(err as i32);
         }
@@ -217,10 +217,11 @@ pub fn decrypt_single_file(input_file: &str, output_file: &str) {
             encryption::decrypt_file(
                 Path::new(input_file),
                 Path::new(output_file),
-                &encryption_key
-            ).expect("Unable to decrypt file");
-        },
-        Err(err)           => {
+                &encryption_key,
+            )
+            .expect("Unable to decrypt file");
+        }
+        Err(err) => {
             println!("{:?}", err);
             std::process::exit(err as i32);
         }
