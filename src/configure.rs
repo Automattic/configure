@@ -118,6 +118,12 @@ pub enum ConfigureError {
 
     #[error("That project key is not defined in keys.json")]
     MissingProjectKey,
+
+    #[error("This decryption key is not valid base64")]
+    DecryptionKeyEncodingError,
+
+    #[error("This decryption key is not a sodium-compatible key")]
+    DecryptionKeyParsingError,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -272,7 +278,7 @@ pub fn update_configuration(
     }
 
     //
-    // Step 4 – Check if the project's secrets are out of date compared to the server.
+    // Step 4 – Check if the project's secrets are out of date compared to the server.
     //          If they out of date, we'll prompt the user to pull the latest remote
     //          changes into the local secrets repo before continuing.
     //

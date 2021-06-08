@@ -1,3 +1,4 @@
+use crate::ConfigureError;
 use log::debug;
 use sodiumoxide::base64::Variant;
 use sodiumoxide::base64::{decode, encode};
@@ -41,6 +42,11 @@ pub fn decrypt_file(
     }
 }
 
+/// Determine whether the given `key` is a valid encryption key for use with this version of the `configure `tool
+pub fn encryption_key_is_valid(key: &str) -> bool {
+    decode_key_with_error(key).is_ok()
+}
+
 fn encrypt_bytes(input: Vec<u8>, key: sodiumoxide::crypto::secretbox::Key) -> Vec<u8> {
     let nonce = secretbox::gen_nonce();
     let secret_bytes = secretbox::seal(&input, &nonce, &key);
@@ -73,10 +79,52 @@ fn encode_key(key: sodiumoxide::crypto::secretbox::Key) -> String {
 }
 
 fn decode_key(key: &str) -> sodiumoxide::crypto::secretbox::Key {
-    let decoded_key_bytes = decode(key, Variant::Original).expect("Unable to decode key");
+    decode_key_with_error(key).expect("Unable to decode key")
+}
 
-    let mut key_bytes: [u8; 32] = Default::default();
-    key_bytes.copy_from_slice(&decoded_key_bytes);
+fn decode_key_with_error(key: &str) -> Result<sodiumoxide::crypto::secretbox::Key, ConfigureError> {
+    match decode(key.trim(), Variant::Original) {
+        Ok(decoded_key) => {
+            if decoded_key.len() != 32 {
+                return Err(ConfigureError::DecryptionKeyParsingError);
+            }
 
-    sodiumoxide::crypto::secretbox::Key(key_bytes)
+            let mut key_bytes: [u8; 32] = Default::default();
+            key_bytes.copy_from_slice(&decoded_key);
+
+            Ok(sodiumoxide::crypto::secretbox::Key(key_bytes))
+        }
+        Err(_err) => Err(ConfigureError::DecryptionKeyEncodingError),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Import the parent scope
+    use super::*;
+
+    #[test]
+    fn test_that_decode_key_with_error_succeeds_for_valid_key() {
+        assert!(decode_key_with_error("B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o=").is_ok())
+    }
+
+    #[test]
+    fn test_that_decode_key_with_error_does_not_fail_for_trailing_whitespace() {
+        assert!(decode_key_with_error("B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o= ").is_ok())
+    }
+
+    #[test]
+    fn test_that_decode_key_with_error_does_not_fail_for_leading_whitespace() {
+        assert!(decode_key_with_error(" B6EeQVtVMBvtZQxEFruq8bUrlPqjtfYdxv2NpL18w1o=").is_ok())
+    }
+
+    #[test]
+    fn test_that_decode_key_with_error_fails_for_invalid_base64() {
+        assert!(decode_key_with_error("Invalid base64").is_err())
+    }
+
+    #[test]
+    fn test_that_decode_key_with_error_fails_for_invalid_sodium_key() {
+        assert!(decode_key_with_error("dGhpcyBpcyBhIHRlc3Q=").is_err())
+    }
 }

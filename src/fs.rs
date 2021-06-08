@@ -246,8 +246,11 @@ pub fn decrypt_files_for_configuration(
             crate::ENCRYPTION_KEY_NAME
         );
         encryption_key = var;
+    } else if let Ok(var) = encryption_key_for_configuration(configuration) {
+        encryption_key = var;
     } else {
-        encryption_key = encryption_key_for_configuration(configuration)?;
+        println!("Unable to locate an encryption key. Exiting");
+        std::process::exit(1);
     }
 
     for file in &configuration.files_to_copy {

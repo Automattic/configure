@@ -5,11 +5,14 @@ mod git;
 mod string;
 mod ui;
 
+use crate::encryption::encryption_key_is_valid;
 use crate::configure::*;
 use crate::fs::*;
+use crate::ui::prompt;
 use libc::c_char;
 use log::debug;
 use std::ffi::CStr;
+use std::path::Path;
 
 /// Set up a project to use the configure tool
 ///
@@ -184,6 +187,39 @@ pub fn find_configuration_file() -> String {
         },
         Err(_) => "".to_string(),
     }
+}
+
+#[no_mangle]
+pub fn encrypt_single_file(input_file: &str, output_file: &str) {
+    let mut encryption_key = prompt("Enter the encryption key you'd like to use to encrypt this file (or leave blank to generate a new one)");
+
+    if !encryption_key_is_valid(&encryption_key) {
+        encryption_key = encryption::generate_key();
+    }
+
+    encryption::encrypt_file(
+        Path::new(input_file),
+        Path::new(output_file),
+        &encryption_key,
+    )
+    .expect("Unable to encrypt file");
+}
+
+#[no_mangle]
+pub fn decrypt_single_file(input_file: &str, output_file: &str) {
+    let encryption_key = prompt("Enter the encryption key used to encrypt this file");
+
+    if !encryption_key_is_valid(&encryption_key) {
+        println!("Invalid Encryption Key");
+        std::process::exit(1);
+    }
+
+    encryption::decrypt_file(
+        Path::new(input_file),
+        Path::new(output_file),
+        &encryption_key,
+    )
+    .expect("Unable to encrypt file");
 }
 
 fn init_encryption() {
