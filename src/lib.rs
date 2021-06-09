@@ -8,7 +8,7 @@ mod ui;
 use crate::configure::*;
 use crate::encryption::EncryptionKey;
 use crate::fs::*;
-use crate::ui::prompt;
+
 use libc::c_char;
 use log::debug;
 use std::ffi::CStr;
@@ -189,15 +189,20 @@ pub fn find_configuration_file() -> String {
     }
 }
 
-pub fn encrypt_single_file(input_file: &str, output_file: &str) {
-    let encryption_key_string = prompt("Enter the encryption key you'd like to use to encrypt this file (or leave blank to generate a new one)");
-
-    let encryption_key = match EncryptionKey::from_str(&encryption_key_string) {
-        Ok(encryption_key) => encryption_key,
-        Err(err) => {
-            println!("{:?}", err);
-            std::process::exit(err as i32);
-        }
+pub fn encrypt_single_file(
+    input_file: &str,
+    output_file: &str,
+    encryption_key_string: Option<String>,
+) {
+    let encryption_key = match encryption_key_string {
+        Some(encryption_key_string) => match EncryptionKey::from_str(&encryption_key_string) {
+            Ok(encryption_key) => encryption_key,
+            Err(err) => {
+                println!("{:?}", err);
+                std::process::exit(err as i32);
+            }
+        },
+        None => crate::encryption::generate_key(),
     };
 
     encryption::encrypt_file(
@@ -209,23 +214,28 @@ pub fn encrypt_single_file(input_file: &str, output_file: &str) {
 }
 
 #[no_mangle]
-pub fn decrypt_single_file(input_file: &str, output_file: &str) {
-    let encryption_key_string = prompt("Enter the encryption key used to encrypt this file");
+pub fn decrypt_single_file(
+    input_file: &str,
+    output_file: &str,
+    encryption_key_string: Option<String>,
+) {
+    let encryption_key = match encryption_key_string {
+        Some(encryption_key_string) => match EncryptionKey::from_str(&encryption_key_string) {
+            Ok(encryption_key) => encryption_key,
+            Err(err) => {
+                println!("{:?}", err);
+                std::process::exit(err as i32);
+            }
+        },
+        None => crate::encryption::generate_key(),
+    };
 
-    match EncryptionKey::from_str(&encryption_key_string) {
-        Ok(encryption_key) => {
-            encryption::decrypt_file(
-                Path::new(input_file),
-                Path::new(output_file),
-                &encryption_key,
-            )
-            .expect("Unable to decrypt file");
-        }
-        Err(err) => {
-            println!("{:?}", err);
-            std::process::exit(err as i32);
-        }
-    }
+    encryption::decrypt_file(
+        Path::new(input_file),
+        Path::new(output_file),
+        &encryption_key,
+    )
+    .expect("Unable to decrypt file");
 }
 
 fn init_encryption() {
@@ -237,3 +247,67 @@ fn init_encryption() {
 const SECRETS_KEY_NAME: &str = "SECRETS_REPO";
 const ENCRYPTION_KEY_NAME: &str = "CONFIGURE_ENCRYPTION_KEY";
 const TEMP_ENCRYPTION_KEY_NAME: &str = "CONFIGURE_ENCRYPTION_KEY_TEMP"; // Useful when switching between versions of the plugin
+
+#[cfg(test)]
+mod tests {
+    // Import the parent scope
+    use super::*;
+    use std::path::PathBuf;
+
+    use rand::distributions::Alphanumeric;
+    use rand::Rng;
+    use std::env::temp_dir;
+
+    use std::fs;
+
+    #[test]
+    fn test_that_single_file_encryption_works_end_to_end() {
+        let random_string = __randomstring();
+        let key = crate::encryption::generate_key().to_string();
+
+        let input_file_path = __tempfile();
+        let input_file_path_string = input_file_path.to_str().unwrap();
+
+        let encrypted_file_path = __tempfile();
+        let encrypted_file_path_string = encrypted_file_path.to_str().unwrap();
+
+        let output_file_path = __tempfile();
+        let output_file_path_string = output_file_path.to_str().unwrap();
+
+        fs::write(&input_file_path, &random_string).unwrap();
+        println!("{:?}", random_string);
+        println!("{:?}", input_file_path_string);
+
+        encrypt_single_file(
+            input_file_path_string,
+            encrypted_file_path_string,
+            Some(key.clone()),
+        );
+        decrypt_single_file(
+            encrypted_file_path_string,
+            output_file_path_string,
+            Some(key.clone()),
+        );
+
+        let result = fs::read_to_string(&output_file_path).unwrap();
+
+        assert_eq!(result, random_string);
+    }
+
+    fn __tempfile() -> PathBuf {
+        let mut dir = temp_dir();
+        let name: String = __randomstring();
+        let file_name = format!("{}.txt", name);
+        dir.push(file_name);
+
+        dir
+    }
+
+    fn __randomstring() -> String {
+        rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(64)
+            .map(char::from)
+            .collect()
+    }
+}
