@@ -7,6 +7,8 @@ use indicatif::ProgressBar;
 use console::style;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
+use std::fs::File as FSFile;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -16,6 +18,7 @@ pub struct Configuration {
     pub branch: String,
     pub pinned_hash: String,
     pub files_to_copy: Vec<File>,
+    pub configuration_path: PathBuf,
 }
 
 impl Configuration {
@@ -45,6 +48,26 @@ impl Configuration {
         self.pinned_hash = latest_hash;
     }
 
+    pub fn save(&self) -> Result<(), ConfigureError> {
+        self.write_to(&self.configuration_path)
+    }
+
+    pub fn write_to(&self, path: &Path) -> Result<(), ConfigureError> {
+        let serialized = self.to_string()?;
+
+        debug!("Writing to: {:?}", path);
+
+        let mut file = match FSFile::create(path) {
+            Ok(file) => file,
+            Err(_) => return Err(ConfigureError::ConfigureFileNotWritable),
+        };
+
+        match file.write_all(serialized.as_bytes()) {
+            Ok(_) => Ok(()),
+            Err(_) => Err(ConfigureError::ConfigureFileNotWritable),
+        }
+    }
+
     fn needs_project_name(&self) -> bool {
         self.project_name.is_empty()
     }
@@ -62,6 +85,7 @@ impl Default for Configuration {
             branch: "".to_string(),
             pinned_hash: "".to_string(),
             files_to_copy,
+            configuration_path: std::env::current_dir().unwrap(),
         }
     }
 }
@@ -197,12 +221,8 @@ pub fn apply_configuration(configuration: &Configuration) {
     info!("Done")
 }
 
-pub fn update_configuration(
-    configuration_file_path: Option<String>,
-    interactive: bool,
-) -> Configuration {
-    let mut configuration = read_configuration_from_file(&configuration_file_path)
-        .expect("Unable to read configuration from `.configure` file");
+pub fn update_configuration(mut configuration: Configuration, interactive: bool) {
+    heading("Configure Update");
 
     let secrets_repo = SecretsRepo::default();
     let starting_branch = secrets_repo
@@ -211,22 +231,11 @@ pub fn update_configuration(
     let starting_ref = secrets_repo
         .current_hash()
         .expect("Unable to determine current mobile secrets commit hash");
-
-    heading("Configure Update");
-
     //
     // Step 1 – Fetch the latest mobile secrets from the server
     //          We need them in order to update the pinned hash
     //
-    let bar = ProgressBar::new_spinner();
-    bar.enable_steady_tick(125);
-    bar.set_message("Fetching Latest Mobile Secrets");
-
-    secrets_repo
-        .update_local_copy()
-        .expect("Unable to fetch latest mobile secrets");
-
-    bar.finish_and_clear();
+    update_secrets_repo_from_source(&secrets_repo).expect("Unable to fetch latest secrets");
 
     //
     // Step 2 – Check if the user wants to use a different secrets branch
@@ -268,15 +277,22 @@ pub fn update_configuration(
 
     if !should_continue {
         debug!("Exiting without updating hash");
-        return configuration;
+        return;
     }
 
     //
-    // Step 4 – Check if the project's secrets are out of date compared to the server.
+    // Step 4 – Check if the project's secrets are out of date compared to the server.
     //          If they out of date, we'll prompt the user to pull the latest remote
     //          changes into the local secrets repo before continuing.
     //
-    let distance = secrets_repo.commits_ahead_of_configuration(&configuration);
+    let distance = match secrets_repo.commits_ahead_of_configuration(&configuration) {
+        Ok(distance) => distance,
+        Err(err) => {
+            println!("{:?}", err);
+            std::process::exit(128); //TODO: Don't merge this until it exits with the error code
+        }
+    };
+
     debug!(
         "The project is {:} commit(s) behind the latest secrets",
         distance
@@ -319,11 +335,9 @@ pub fn update_configuration(
     }
 
     //
-    // Step 5 – Write out encrypted files as needed
+    // Step 5 – Write the configuration back to disk
     //
-    let configure_file_path = resolve_configure_file_path(&configuration_file_path).expect("");
-    write_configuration_to(&configuration, &configure_file_path)
-        .expect("Unable to write configuration");
+    configuration.save().expect("Unable to write configuration");
 
     //
     // Step 6 – Write out encrypted files as needed
@@ -344,11 +358,6 @@ pub fn update_configuration(
     // Step 8 – Apply these changes to the current repo
     //
     apply_configuration(&configuration);
-
-    //
-    // Step 9 - All done!
-    //
-    configuration
 }
 
 pub fn validate_configuration(configuration: Configuration) {
@@ -381,6 +390,18 @@ pub fn setup_configuration(mut configuration: Configuration) {
     // Create a key in `keys.json` for the project if one doesn't already exist
     generate_encryption_key_if_needed(&configuration)
         .expect("Unable to generate an encryption key for this project");
+}
+
+fn update_secrets_repo_from_source(secrets_repo: &SecretsRepo) -> Result<(), ConfigureError> {
+    let bar = ProgressBar::new_spinner();
+    bar.enable_steady_tick(125);
+    bar.set_message("Fetching Latest Secrets");
+
+    secrets_repo.update_local_copy()?;
+
+    bar.finish_and_clear();
+
+    Ok(())
 }
 
 fn prompt_for_project_name_if_needed(mut configuration: Configuration) -> Configuration {

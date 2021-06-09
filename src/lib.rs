@@ -88,7 +88,7 @@ pub fn update(interactive: bool, configuration_file_path: Option<String>) {
             ui::warn("Current configuration is empty – unable to update when running in non-interactive mode");
         }
     } else {
-        update_configuration(configuration_file_path, interactive);
+        update_configuration(configuration, interactive);
     }
 }
 

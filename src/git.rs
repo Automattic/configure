@@ -172,30 +172,28 @@ impl SecretsRepo {
     }
 
     /// How far out of date the configure file is relative to the secrets repo
-    pub fn commits_ahead_of_configuration(&self, configuration: &Configuration) -> i32 {
-        let current_branch = self
-            .current_branch()
-            .expect("Unable to get current mobile secrets branch");
-        let current_hash = self
-            .current_hash()
-            .expect("Unable to get current mobile secrets hash");
+    pub fn commits_ahead_of_configuration(
+        &self,
+        configuration: &Configuration,
+    ) -> Result<i32, ConfigureError> {
+        let current_branch = self.current_branch()?;
+        let current_hash = self.current_hash()?;
 
-        self.switch_to_branch(&configuration.branch)
-            .expect("Unable to switch branches – you might need to fetch the most recent changes from the remote first?");
+        self.switch_to_branch(&configuration.branch)?;
+        // .expect("Unable to switch branches – you might need to fetch the most recent changes from the remote first?");
 
-        let latest_hash = self
-            .current_hash()
-            .expect("Unable to retrieve current secrets hash");
+        let latest_hash = self.current_hash()?;
+        // .expect("Unable to retrieve current secrets hash");
 
-        let distance = self
-            .distance_between_local_commit_hashes(&configuration.pinned_hash, &latest_hash)
-            .expect("Unable to determine the distance between two hashes");
+        let distance =
+            self.distance_between_local_commit_hashes(&configuration.pinned_hash, &latest_hash)?;
+        // .expect("Unable to determine the distance between two hashes");
 
         // Restore the secrets repo to its state before starting
-        self.switch_to_branch_at_revision(&current_branch, &current_hash)
-            .expect("Unable to roll back to branch");
+        self.switch_to_branch_at_revision(&current_branch, &current_hash)?;
+        // .expect("Unable to roll back to branch");
 
-        distance
+        Ok(distance)
     }
 
     // Returns the number of commits between two hashes. If the hashes aren't part of the same history
