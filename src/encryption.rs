@@ -31,10 +31,7 @@ pub fn encrypt_file(
         Err(_err) => return Err(ConfigureError::InputFileNotReadable),
     };
 
-    let encrypted_bytes = match encrypt_bytes(&file_contents, key) {
-        Ok(encrypted_bytes) => encrypted_bytes,
-        Err(_err) => return Err(ConfigureError::DataEncryptionError),
-    };
+    let encrypted_bytes = encrypt_bytes(&file_contents, key);
 
     match write(&output_path, encrypted_bytes) {
         Ok(()) => Ok(()),
@@ -63,11 +60,11 @@ pub fn decrypt_file(
     }
 }
 
-fn encrypt_bytes(input: &[u8], key: &EncryptionKey) -> Result<Vec<u8>, ConfigureError> {
+fn encrypt_bytes(input: &[u8], key: &EncryptionKey) -> Vec<u8> {
     let nonce = secretbox::gen_nonce();
     let secret_bytes = secretbox::seal(input, &nonce, &key.key);
 
-    Ok([&nonce[..], &secret_bytes].concat())
+    [&nonce[..], &secret_bytes].concat()
 }
 
 fn decrypt_bytes(input: &[u8], key: &EncryptionKey) -> Result<Vec<u8>, ConfigureError> {
@@ -159,7 +156,7 @@ mod tests {
     fn test_end_to_end_encryption() {
         let random_bytes = rand::thread_rng().gen::<[u8; 32]>().to_vec();
         let key = generate_key();
-        let encrypted_bytes = encrypt_bytes(&random_bytes, &key).expect("Encryption must succeed");
+        let encrypted_bytes = encrypt_bytes(&random_bytes, &key);
         let decrypted_bytes =
             decrypt_bytes(&encrypted_bytes, &key).expect("Decryption must succeed");
         assert_eq!(random_bytes, decrypted_bytes);

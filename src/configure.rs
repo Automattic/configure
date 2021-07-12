@@ -71,6 +71,7 @@ pub enum ConfigureError {
     #[error("Unable to decrypt file")]
     DataDecryptionError,
 
+    #[allow(dead_code)] // This isn't currently used, but removing it will mess up our expected exit codes
     #[error("Unable to encrypt file")]
     DataEncryptionError,
 
