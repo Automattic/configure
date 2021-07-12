@@ -292,14 +292,14 @@ impl RepoStatus {
         if status.contains("ahead") {
             return Ok(RepoStatus {
                 sync_state: RepoSyncState::Ahead,
-                distance: RepoStatus::parse_digits_from_repo_status(&status)?,
+                distance: RepoStatus::parse_digits_from_repo_status(status)?,
             });
         }
 
         if status.contains("behind") {
             return Ok(RepoStatus {
                 sync_state: RepoSyncState::Behind,
-                distance: RepoStatus::parse_digits_from_repo_status(&status)?,
+                distance: RepoStatus::parse_digits_from_repo_status(status)?,
             });
         }
 

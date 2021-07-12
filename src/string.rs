@@ -3,8 +3,8 @@ pub fn distance_between_strings_in(
     string2: &str,
     strings: &[String],
 ) -> Option<i32> {
-    let str1_ix = index_of_string_in(string1, &strings);
-    let str2_ix = index_of_string_in(string2, &strings);
+    let str1_ix = index_of_string_in(string1, strings);
+    let str2_ix = index_of_string_in(string2, strings);
 
     if let (Some(ix1), Some(ix2)) = (str1_ix, str2_ix) {
         Some((ix1 - ix2).abs())

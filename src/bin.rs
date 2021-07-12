@@ -67,6 +67,30 @@ enum Command {
 
     /// Create a new encryption key for use with a project
     CreateKey,
+
+    /// Encrypt a single file
+    EncryptFile {
+        #[structopt(short = "f", long = "input-file")]
+        input_file: String,
+
+        #[structopt(short = "o", long = "output-file")]
+        output_file: Option<String>,
+
+        #[structopt(short = "k", long = "encryption-key")]
+        encryption_key: Option<String>,
+    },
+
+    /// Decrypt a single file
+    DecryptFile {
+        #[structopt(short = "f", long = "input-file")]
+        input_file: String,
+
+        #[structopt(short = "o", long = "output-file")]
+        output_file: Option<String>,
+
+        #[structopt(short = "k", long = "encryption-key")]
+        encryption_key: String,
+    },
 }
 
 #[derive(StructOpt)]
@@ -136,5 +160,15 @@ pub fn main() {
         Command::Init => configure::init(),
         Command::Validate => configure::validate(),
         Command::CreateKey => println!("{:}", configure::generate_encryption_key()),
+        Command::EncryptFile {
+            input_file,
+            output_file,
+            encryption_key,
+        } => configure::encrypt_single_file_path(&input_file, output_file, encryption_key),
+        Command::DecryptFile {
+            input_file,
+            output_file,
+            encryption_key,
+        } => configure::decrypt_single_file_path(&input_file, output_file, encryption_key),
     }
 }

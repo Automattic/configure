@@ -69,13 +69,17 @@ impl Default for Configuration {
 #[derive(Error, Debug)]
 pub enum ConfigureError {
     #[error("Unable to decrypt file")]
-    DataDecryptionError(#[from] std::io::Error),
+    DataDecryptionError,
+
+    #[allow(dead_code)] // This isn't currently used, but removing it will mess up our expected exit codes
+    #[error("Unable to encrypt file")]
+    DataEncryptionError,
 
     #[error("Unknown git error")]
-    SecretsRepoError(#[from] git2::Error),
+    SecretsRepoError,
 
     #[error("Invalid git status")]
-    GitStatusParsingError(#[from] std::num::ParseIntError),
+    GitStatusParsingError,
 
     #[error("Unable to find current secrets repo branch")]
     GitGetCurrentBranchError,
@@ -118,6 +122,40 @@ pub enum ConfigureError {
 
     #[error("That project key is not defined in keys.json")]
     MissingProjectKey,
+
+    #[error("No environment variable or secrets repository found – cannot decrypt files")]
+    MissingDecryptionKey,
+
+    #[error("This decryption key is not valid base64")]
+    DecryptionKeyEncodingError,
+
+    #[error("This decryption key is not a sodium-compatible key")]
+    DecryptionKeyParsingError,
+
+    #[error("Unable to read input file")]
+    InputFileNotReadable,
+
+    #[error("Unable to write output file")]
+    OutputFileNotWritable,
+}
+
+// These implementations should be removed as soon as we can adopt `ConfigureError` everywhere
+impl From<std::io::Error> for ConfigureError {
+    fn from(_error: std::io::Error) -> Self {
+        ConfigureError::DataDecryptionError
+    }
+}
+
+impl From<git2::Error> for ConfigureError {
+    fn from(_error: git2::Error) -> Self {
+        ConfigureError::SecretsRepoError
+    }
+}
+
+impl From<std::num::ParseIntError> for ConfigureError {
+    fn from(_error: std::num::ParseIntError) -> Self {
+        ConfigureError::GitStatusParsingError
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -190,7 +228,7 @@ impl File {
 
 pub fn apply_configuration(configuration: &Configuration) {
     // Decrypt the project's configuration files
-    decrypt_files_for_configuration(&configuration).expect("Unable to decrypt and copy files");
+    decrypt_files_for_configuration(configuration).expect("Unable to decrypt and copy files");
 
     debug!("All Files Copied!");
 
@@ -272,7 +310,7 @@ pub fn update_configuration(
     }
 
     //
-    // Step 4 – Check if the project's secrets are out of date compared to the server.
+    // Step 4 – Check if the project's secrets are out of date compared to the server.
     //          If they out of date, we'll prompt the user to pull the latest remote
     //          changes into the local secrets repo before continuing.
     //
