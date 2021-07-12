@@ -370,7 +370,7 @@ fn create_parent_directory_for_path_if_not_exists(path: &Path) -> Result<(), Err
     create_dir_all(parent)
 }
 
-pub fn infer_encryption_output_filename(path: &Path) -> PathBuf{
+pub fn infer_encryption_output_filename(path: &Path) -> PathBuf {
     let mut string = path.to_path_buf().into_os_string().into_string().unwrap();
     string.push_str(".enc");
     Path::new(&string).to_path_buf()
@@ -383,7 +383,8 @@ pub fn infer_decryption_output_filename(path: &Path) -> PathBuf {
         string.push_str(".decrypted");
         return Path::new(&string).to_path_buf();
     } else {
-        let filename_without_suffix: String = string.chars().take(string.chars().count() - 4).collect();
+        let filename_without_suffix: String =
+            string.chars().take(string.chars().count() - 4).collect();
         return Path::new(&filename_without_suffix).to_path_buf();
     }
 }
@@ -452,7 +453,8 @@ mod tests {
     }
 
     #[test]
-    fn test_decrypted_filename_can_be_derived_from_original_filename_for_files_without_extension_or_suffix() {
+    fn test_decrypted_filename_can_be_derived_from_original_filename_for_files_without_extension_or_suffix(
+    ) {
         let source = Path::new("/Gemfile").to_path_buf();
         let dest = Path::new("/Gemfile.decrypted").to_path_buf();
 

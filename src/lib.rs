@@ -196,7 +196,7 @@ pub fn find_configuration_file() -> String {
 pub fn encrypt_single_file_path(
     input_file: &str,
     output_file: Option<String>,
-    encryption_key_string: Option<String>
+    encryption_key_string: Option<String>,
 ) {
     let input_file_path = Path::new(input_file).to_path_buf();
     let output_file_path = output_file.map(|path| Path::new(&path).to_path_buf());
@@ -226,7 +226,7 @@ pub fn encrypt_single_file(
     // Infer the output path based on the input path if needed
     let output_file = match output_file {
         Some(path) => path,
-        None => infer_encryption_output_filename(&input_file)
+        None => infer_encryption_output_filename(&input_file),
     };
 
     encryption::encrypt_file(
@@ -243,7 +243,7 @@ pub fn encrypt_single_file(
 pub fn decrypt_single_file_path(
     input_file: &str,
     output_file: Option<String>,
-    encryption_key_string: String
+    encryption_key_string: String,
 ) {
     let input_file_path = Path::new(input_file).to_path_buf();
     let output_file_path = output_file.map(|path| Path::new(&path).to_path_buf());
@@ -260,15 +260,15 @@ pub fn decrypt_single_file(
     let encryption_key = match EncryptionKey::from_str(&encryption_key_string) {
         Ok(encryption_key) => encryption_key,
         Err(err) => {
-             println!("{:?}", err);
-             std::process::exit(err as i32);
+            println!("{:?}", err);
+            std::process::exit(err as i32);
         }
     };
 
     // Infer the file path based on the input path
     let output_file = match output_file {
         Some(path) => path,
-        None => infer_decryption_output_filename(&input_file)
+        None => infer_decryption_output_filename(&input_file),
     };
 
     encryption::decrypt_file(
