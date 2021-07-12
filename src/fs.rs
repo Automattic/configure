@@ -370,6 +370,25 @@ fn create_parent_directory_for_path_if_not_exists(path: &Path) -> Result<(), Err
     create_dir_all(parent)
 }
 
+pub fn infer_encryption_output_filename(path: &PathBuf) -> PathBuf{
+    let mut string = path.clone().into_os_string().into_string().unwrap();
+    string.push_str(".enc");
+    Path::new(&string).to_path_buf()
+}
+
+pub fn infer_decryption_output_filename(path: &PathBuf) -> PathBuf {
+    let path = path.clone();
+    let mut string = path.clone().into_os_string().into_string().unwrap();
+
+    if !string.ends_with(".enc") {
+        string.push_str(".decrypted");
+        return Path::new(&string).to_path_buf();
+    } else {
+        let filename_without_suffix: String = string.chars().take(string.chars().count() - 4).collect();
+        return Path::new(&filename_without_suffix).to_path_buf();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Import the parent scope
@@ -399,6 +418,46 @@ mod tests {
         delete_configure_file();
         find_configure_file().unwrap();
         assert!(get_configure_file_path().unwrap().exists());
+    }
+
+    #[test]
+    fn test_encrypted_filename_can_be_derived_from_original_filename_for_files_with_extension() {
+        let source = Path::new("/test.json").to_path_buf();
+        let dest = Path::new("/test.json.enc").to_path_buf();
+
+        assert_eq!(infer_encryption_output_filename(&source), dest)
+    }
+
+    #[test]
+    fn test_encrypted_filename_can_be_derived_from_original_filename_for_files_without_extension() {
+        let source = Path::new("/Gemfile").to_path_buf();
+        let dest = Path::new("/Gemfile.enc").to_path_buf();
+
+        assert_eq!(infer_encryption_output_filename(&source), dest)
+    }
+
+    #[test]
+    fn test_decrypted_filename_can_be_derived_from_encrypted_filename_for_files_with_extension() {
+        let source = Path::new("/test.json.enc").to_path_buf();
+        let dest = Path::new("/test.json").to_path_buf();
+
+        assert_eq!(infer_decryption_output_filename(&source), dest)
+    }
+
+    #[test]
+    fn test_decrypted_filename_can_be_derived_from_original_filename_for_files_without_extension() {
+        let source = Path::new("/Gemfile.enc").to_path_buf();
+        let dest = Path::new("/Gemfile").to_path_buf();
+
+        assert_eq!(infer_decryption_output_filename(&source), dest)
+    }
+
+    #[test]
+    fn test_decrypted_filename_can_be_derived_from_original_filename_for_files_without_extension_or_suffix() {
+        let source = Path::new("/Gemfile").to_path_buf();
+        let dest = Path::new("/Gemfile.decrypted").to_path_buf();
+
+        assert_eq!(infer_decryption_output_filename(&source), dest)
     }
 
     fn delete_configure_file() {

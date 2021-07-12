@@ -74,7 +74,7 @@ enum Command {
         input_file: String,
 
         #[structopt(short = "o", long = "output-file")]
-        output_file: String,
+        output_file: Option<String>,
 
         #[structopt(short = "k", long = "encryption-key")]
         encryption_key: Option<String>,
@@ -86,10 +86,10 @@ enum Command {
         input_file: String,
 
         #[structopt(short = "o", long = "output-file")]
-        output_file: String,
+        output_file: Option<String>,
 
         #[structopt(short = "k", long = "encryption-key")]
-        encryption_key: Option<String>,
+        encryption_key: String,
     },
 }
 
@@ -164,11 +164,11 @@ pub fn main() {
             input_file,
             output_file,
             encryption_key,
-        } => configure::encrypt_single_file(&input_file, &output_file, encryption_key),
+        } => configure::encrypt_single_file_path(&input_file, output_file, encryption_key),
         Command::DecryptFile {
             input_file,
             output_file,
             encryption_key,
-        } => configure::decrypt_single_file(&input_file, &output_file, encryption_key),
+        } => configure::decrypt_single_file_path(&input_file, output_file, encryption_key),
     }
 }
