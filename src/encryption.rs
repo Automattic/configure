@@ -13,6 +13,10 @@ pub fn init() {
 
 pub fn generate_key() -> EncryptionKey {
     debug!("Generating an encryption key");
+
+    // It shouldn't be possible for this to failure, except in very weird
+    // circumstances (like if the system's entropy source is exhausted). For that reason, we don't
+    // use a `Result` type here.
     let key_bytes = secretbox::gen_key();
     EncryptionKey::from_str(&encode_key(&key_bytes)).expect("Unable to generate new encryption key")
 }
