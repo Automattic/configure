@@ -199,11 +199,7 @@ pub fn encrypt_single_file_path(
     encryption_key_string: Option<String>
 ) {
     let input_file_path = Path::new(input_file).to_path_buf();
-    let output_file_path: Option<PathBuf> = match output_file {
-        Some(path) => Some(Path::new(&path).to_path_buf()),
-        None       => None
-    };
-
+    let output_file_path = output_file.map(|path| Path::new(&path).to_path_buf());
     encrypt_single_file(input_file_path, output_file_path, encryption_key_string)
 }
 
@@ -250,10 +246,7 @@ pub fn decrypt_single_file_path(
     encryption_key_string: String
 ) {
     let input_file_path = Path::new(input_file).to_path_buf();
-    let output_file_path: Option<PathBuf> = match output_file {
-        Some(path) => Some(Path::new(&path).to_path_buf()),
-        None       => None
-    };
+    let output_file_path = output_file.map(|path| Path::new(&path).to_path_buf());
 
     decrypt_single_file(input_file_path, output_file_path, encryption_key_string)
 }

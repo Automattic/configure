@@ -370,15 +370,14 @@ fn create_parent_directory_for_path_if_not_exists(path: &Path) -> Result<(), Err
     create_dir_all(parent)
 }
 
-pub fn infer_encryption_output_filename(path: &PathBuf) -> PathBuf{
-    let mut string = path.clone().into_os_string().into_string().unwrap();
+pub fn infer_encryption_output_filename(path: &Path) -> PathBuf{
+    let mut string = path.to_path_buf().into_os_string().into_string().unwrap();
     string.push_str(".enc");
     Path::new(&string).to_path_buf()
 }
 
-pub fn infer_decryption_output_filename(path: &PathBuf) -> PathBuf {
-    let path = path.clone();
-    let mut string = path.clone().into_os_string().into_string().unwrap();
+pub fn infer_decryption_output_filename(path: &Path) -> PathBuf {
+    let mut string = path.to_path_buf().into_os_string().into_string().unwrap();
 
     if !string.ends_with(".enc") {
         string.push_str(".decrypted");
