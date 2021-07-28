@@ -1,6 +1,7 @@
 use crate::encryption::{decrypt_file, encrypt_file, generate_key};
 use crate::Configuration;
 use crate::ConfigureError;
+use crate::EncryptionKey;
 use log::{debug, info};
 use ring::digest::{Context, SHA256};
 
@@ -116,7 +117,7 @@ pub fn resolve_configure_file_path(
 pub fn read_configuration_from_file(
     configure_file_path: &Option<String>,
 ) -> Result<Configuration, ConfigureError> {
-    let configure_file_path = resolve_configure_file_path(&configure_file_path)?;
+    let configure_file_path = resolve_configure_file_path(configure_file_path)?;
 
     if !configure_file_path.is_file() {
         return Err(ConfigureError::ConfigureFileNotReadable);
@@ -163,31 +164,37 @@ pub fn write_configuration_to(
 pub fn generate_encryption_key_if_needed(
     configuration: &Configuration,
 ) -> Result<(), ConfigureError> {
-    if encryption_key_for_configuration(&configuration).is_ok() {
+    if encryption_key_for_configuration(configuration).is_ok() {
         return Ok(());
     }
 
     let keys_file_path = find_keys_file()?;
 
     let mut keys = read_keys(&keys_file_path)?;
-    keys.insert(configuration.project_name.to_string(), generate_key());
+    keys.insert(
+        configuration.project_name.to_string(),
+        generate_key().to_string(),
+    );
 
     save_keys(&keys_file_path, &keys)
 }
 
 pub fn encryption_key_for_configuration(
     configuration: &Configuration,
-) -> Result<String, ConfigureError> {
+) -> Result<EncryptionKey, ConfigureError> {
     let keys_file_path = find_keys_file()?;
 
     debug!("Reading keys from {:?}", keys_file_path);
 
     let keys = read_keys(&keys_file_path)?;
 
-    match keys.get(&configuration.project_name) {
-        Some(key) => Ok(key.to_string()),
-        None => Err(ConfigureError::MissingProjectKey),
-    }
+    // This is the first key that matches in the `keys.json` file
+    let key = match keys.get(&configuration.project_name) {
+        Some(key) => key,
+        None => return Err(ConfigureError::MissingProjectKey),
+    };
+
+    EncryptionKey::from_str(key)
 }
 
 fn read_keys(source: &Path) -> Result<HashMap<String, String>, ConfigureError> {
@@ -226,7 +233,7 @@ pub fn decrypt_files_for_configuration(
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root()?;
 
-    let encryption_key;
+    let encryption_key: EncryptionKey;
 
     // Allow defining an environment variable that can override the key selection (for use in CI, for example).
     // This is placed here and not resued when encrypting files because it is a security risk to allow this override for
@@ -239,15 +246,17 @@ pub fn decrypt_files_for_configuration(
             "Found an environment variable named {:}. Using its value as the encryption key",
             crate::TEMP_ENCRYPTION_KEY_NAME
         );
-        encryption_key = var;
+        encryption_key = EncryptionKey::from_str(&var)?;
     } else if let Ok(var) = env::var(crate::ENCRYPTION_KEY_NAME) {
         println!(
             "Found an environment variable named {:}. Using its value as the encryption key",
             crate::ENCRYPTION_KEY_NAME
         );
+        encryption_key = EncryptionKey::from_str(&var)?;
+    } else if let Ok(var) = encryption_key_for_configuration(configuration) {
         encryption_key = var;
     } else {
-        encryption_key = encryption_key_for_configuration(configuration)?;
+        return Err(ConfigureError::MissingDecryptionKey);
     }
 
     for file in &configuration.files_to_copy {
@@ -309,7 +318,7 @@ pub fn decrypt_files_for_configuration(
 
 pub fn write_encrypted_files_for_configuration(
     configuration: &Configuration,
-    encryption_key: String,
+    encryption_key: EncryptionKey,
 ) -> Result<(), ConfigureError> {
     let project_root = find_project_root()?;
     let secrets_root = find_secrets_repo()?;
@@ -326,7 +335,7 @@ pub fn write_encrypted_files_for_configuration(
             source, destination
         );
 
-        encrypt_file(&source, &destination, &encryption_key)?;
+        encrypt_file(source, &destination, &encryption_key)?;
     }
 
     Ok(())
@@ -361,6 +370,27 @@ fn create_parent_directory_for_path_if_not_exists(path: &Path) -> Result<(), Err
     create_dir_all(parent)
 }
 
+pub fn infer_encryption_output_filename(path: &Path) -> PathBuf {
+    let mut string = path.to_path_buf().into_os_string().into_string().unwrap();
+    string.push_str(".enc");
+    Path::new(&string).to_path_buf()
+}
+
+pub fn infer_decryption_output_filename(path: &Path) -> PathBuf {
+    let mut string = path.to_path_buf().into_os_string().into_string().unwrap();
+
+    if !string.ends_with(".enc") {
+        string.push_str(".decrypted");
+        return Path::new(&string).to_path_buf();
+    } else {
+        let filename_without_suffix: String = string
+            .chars()
+            .take(string.chars().count() - ".enc".chars().count())
+            .collect();
+        return Path::new(&filename_without_suffix).to_path_buf();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Import the parent scope
@@ -390,6 +420,47 @@ mod tests {
         delete_configure_file();
         find_configure_file().unwrap();
         assert!(get_configure_file_path().unwrap().exists());
+    }
+
+    #[test]
+    fn test_encrypted_filename_can_be_derived_from_original_filename_for_files_with_extension() {
+        let source = Path::new("/test.json").to_path_buf();
+        let dest = Path::new("/test.json.enc").to_path_buf();
+
+        assert_eq!(infer_encryption_output_filename(&source), dest)
+    }
+
+    #[test]
+    fn test_encrypted_filename_can_be_derived_from_original_filename_for_files_without_extension() {
+        let source = Path::new("/Gemfile").to_path_buf();
+        let dest = Path::new("/Gemfile.enc").to_path_buf();
+
+        assert_eq!(infer_encryption_output_filename(&source), dest)
+    }
+
+    #[test]
+    fn test_decrypted_filename_can_be_derived_from_encrypted_filename_for_files_with_extension() {
+        let source = Path::new("/test.json.enc").to_path_buf();
+        let dest = Path::new("/test.json").to_path_buf();
+
+        assert_eq!(infer_decryption_output_filename(&source), dest)
+    }
+
+    #[test]
+    fn test_decrypted_filename_can_be_derived_from_original_filename_for_files_without_extension() {
+        let source = Path::new("/Gemfile.enc").to_path_buf();
+        let dest = Path::new("/Gemfile").to_path_buf();
+
+        assert_eq!(infer_decryption_output_filename(&source), dest)
+    }
+
+    #[test]
+    fn test_decrypted_filename_can_be_derived_from_original_filename_for_files_without_extension_or_suffix(
+    ) {
+        let source = Path::new("/Gemfile").to_path_buf();
+        let dest = Path::new("/Gemfile.decrypted").to_path_buf();
+
+        assert_eq!(infer_decryption_output_filename(&source), dest)
     }
 
     fn delete_configure_file() {

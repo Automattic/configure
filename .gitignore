@@ -10,3 +10,8 @@ libconfigure-*.gem
 
 # Ruby Gem Binaries
 ruby-gem/bin/lib*
+
+# LLVM Debugging Files
+default.profraw
+*.gcda
+*.gcno
