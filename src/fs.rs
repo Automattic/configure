@@ -383,8 +383,10 @@ pub fn infer_decryption_output_filename(path: &Path) -> PathBuf {
         string.push_str(".decrypted");
         return Path::new(&string).to_path_buf();
     } else {
-        let filename_without_suffix: String =
-            string.chars().take(string.chars().count() - 4).collect();
+        let filename_without_suffix: String = string
+            .chars()
+            .take(string.chars().count() - ".enc".chars().count())
+            .collect();
         return Path::new(&filename_without_suffix).to_path_buf();
     }
 }
