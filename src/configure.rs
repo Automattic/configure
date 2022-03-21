@@ -175,7 +175,7 @@ impl File {
                 if let Some(file_name) = os_file_name.to_str() {
                     if let Some(destination) = project_root
                         .join(".configure-files")
-                        .join(file_name.to_owned() + &".enc".to_owned())
+                        .join(file_name.to_owned() + ".enc")
                         .to_str()
                     {
                         return destination.to_string();
@@ -184,7 +184,7 @@ impl File {
             }
         }
 
-        self.destination.clone() + &".enc".to_owned()
+        self.destination.clone() + ".enc"
     }
 
     pub fn get_decrypted_destination(&self) -> String {
@@ -214,13 +214,11 @@ impl File {
 
         let datetime = date.format("%Y-%m-%d-%H-%M-%S").to_string();
 
-        let filename: String;
-
-        if extension.is_empty() {
-            filename = format!("{:}-{:}.bak", file_stem, datetime);
+        let filename: String = if extension.is_empty() {
+            format!("{:}-{:}.bak", file_stem, datetime)
         } else {
-            filename = format!("{:}-{:}.{:}.bak", file_stem, datetime, extension);
-        }
+            format!("{:}-{:}.{:}.bak", file_stem, datetime, extension)
+        };
 
         directory.join(filename)
     }

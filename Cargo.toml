@@ -39,3 +39,6 @@ ring = "0.16.18"
 base64 = "0.13.0"
 
 chrono = "0.4"
+
+# Avoid cross-platform SSL issues by inluding openssl in our binary
+openssl = { version = "0.10", features = ["vendored"] }
