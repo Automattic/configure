@@ -150,7 +150,7 @@ jobs:
           cd gradle-plugin
           TAG_NAME=${GITHUB_REF#refs/tags/}
 
-          ./gradlew :configure:publishPluginToS3 --tag-name=$TAG_NAME
+          ./gradlew :configure:prepareToPublishToS3 --tag-name=$TAG_NAME :configure:publishPluginMavenPublicationToS3Repository
         env:
           AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
           AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
