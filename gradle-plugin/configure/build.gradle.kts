@@ -6,6 +6,7 @@ version = "0.6.2"
 
 plugins {
     `kotlin-dsl`
+    id("java-gradle-plugin")
     id("com.github.gmazzo.buildconfig") version "3.0.0"
     id("com.automattic.android.publish-to-s3")
 }
