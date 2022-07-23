@@ -111,7 +111,7 @@ jobs:
           asset_content_type: application/zip
   # Build for Linux
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     needs: [setup]
     steps:
       - uses: actions/checkout@v2
@@ -141,7 +141,7 @@ jobs:
           asset_content_type: application/zip
   # Publish Gradle Plugin
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     needs: [windows,linux,mac]
     steps:
       - uses: actions/checkout@v2
