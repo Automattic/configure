@@ -7,7 +7,7 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     outputs:
       uploadurl: ${{ steps.create_release.outputs.upload_url }}
     steps:
