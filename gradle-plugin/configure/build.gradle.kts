@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 /// The plugin version number – change this to match whatever your tag will be
 group = "com.automattic.android"
-version = "0.6.3"
+version = "0.6.4"
 
 plugins {
     `kotlin-dsl`
