@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 mod commands;
 mod utils;
 
-use commands::{setup_command, update_command, apply_command};
+use commands::{apply_command, setup_command, update_command};
 
 // Constants for file names
 pub const REPO_SECRETS_CONFIG_FILE: &str = "config.yaml";
