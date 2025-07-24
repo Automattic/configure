@@ -57,6 +57,75 @@ pub fn setup_command() -> Result<()> {
     perform_initial_setup(&mobile_secrets_path, &repo_name)
 }
 
+/// Performs the initial setup when no existing configuration is found.
+pub fn perform_initial_setup(mobile_secrets_path: &std::path::Path, repo_name: &str) -> Result<()> {
+    println!("🚀 Setting up secrets configuration for the first time...");
+    println!();
+
+    let sha1 = get_mobile_secrets_head_sha1(mobile_secrets_path)?;
+
+    // Create initial config
+    let config = Config {
+        sha1,
+        files: Vec::new(),
+    };
+
+    // Create .a8c-secrets directory
+    fs::create_dir_all(REPO_SECRETS_DIR)?;
+
+    // Write config file with examples
+    let config_yaml_with_examples = format!(
+        r#"sha1: {}
+files: []
+# Example entries - edit this section to specify which secret files to sync:
+# files:
+#   - source: "path/to/secrets.properties" # Path relative to ~/.mobile-secrets
+#     destination: "config/secret1.json"   # Path relative to current repository
+#     # Prefer decrypting files outside of your repository if possible, so that you don't risk committing them
+#     # by accident but also don't risk them being scanned by LLMs you might use on your machine.
+#   - source: "shared/Secrets.swift"
+#     destination: "~/.a8c-secrets/myapp/Secrets.swift"
+"#,
+        config.sha1
+    );
+    let config_path = Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
+    fs::write(&config_path, config_yaml_with_examples)?;
+
+    // Generate encryption key
+    let key = generate_encryption_key();
+    let key_b64 = general_purpose::STANDARD.encode(key);
+
+    // Update encryption keys file
+    let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
+    let mut keys: HashMap<String, String> = if keys_file_path.exists() {
+        let keys_content = fs::read_to_string(&keys_file_path)?;
+        serde_yaml::from_str(&keys_content).unwrap_or_default()
+    } else {
+        HashMap::new()
+    };
+
+    keys.insert(repo_name.to_owned(), key_b64.clone());
+    let keys_yaml = serde_yaml::to_string(&keys)?;
+    fs::write(&keys_file_path, keys_yaml)?;
+
+    println!("✅ Configuration file '{}' created successfully.", config_path.display());
+    println!(
+        "✅ Encryption key generated and saved to {}",
+        keys_file_path.display()
+    );
+    println!("🎉 Setup complete!");
+    println!("📋 Next steps:");
+    println!("1. Add the following environment variable to ~/.mobile-secrets/CI/secrets/{repo_name}/env for CI:");
+    println!();
+    println!("   export {ENV_VAR_KEY}=\"{key_b64}\"");
+    println!();
+    println!("2. Commit and push the changes to `~/.mobile-secrets`'s `trunk` branch directly.");
+    println!("3. Edit {} to specify which secret files you want to sync for your repository.", config_path.display());
+    println!("4. Run `a8c-secrets update` to encrypt those secrets files into your repository.");
+
+    Ok(())
+}
+
 /// Validates existing setup and displays current configuration.
 pub fn validate_and_display_setup(
     config_exists: bool,
@@ -129,73 +198,6 @@ pub fn validate_and_display_setup(
         (false, false) => unreachable!("This case is handled by initial setup"),
     }
     
-    Ok(())
-}
-
-/// Performs the initial setup when no existing configuration is found.
-pub fn perform_initial_setup(mobile_secrets_path: &std::path::Path, repo_name: &str) -> Result<()> {
-    println!("🚀 Setting up secrets configuration for the first time...");
-    println!();
-    
-    let sha1 = get_mobile_secrets_head_sha1(mobile_secrets_path)?;
-
-    // Create initial config
-    let config = Config {
-        sha1,
-        files: Vec::new(),
-    };
-
-    // Create .a8c-secrets directory
-    fs::create_dir_all(REPO_SECRETS_DIR)?;
-    
-    // Write config file with examples
-    let config_yaml_with_examples = format!(
-        r#"sha1: {}
-files: []
-# Example entries - edit this section to specify which secret files to sync:
-# files:
-#   - source: "path/to/secret1.json"      # Path relative to ~/.mobile-secrets
-#     destination: "config/secret1.json"  # Path relative to current repository
-#   - source: "shared/database.env"       # Another example
-#     destination: ".env.local"           # Can rename files during sync
-"#,
-        config.sha1
-    );
-    let config_path = Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
-    fs::write(&config_path, config_yaml_with_examples)?;
-
-    // Generate encryption key
-    let key = generate_encryption_key();
-    let key_b64 = general_purpose::STANDARD.encode(key);
-
-    // Update encryption keys file
-    let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
-    let mut keys: HashMap<String, String> = if keys_file_path.exists() {
-        let keys_content = fs::read_to_string(&keys_file_path)?;
-        serde_yaml::from_str(&keys_content).unwrap_or_default()
-    } else {
-        HashMap::new()
-    };
-
-    keys.insert(repo_name.to_owned(), key_b64.clone());
-    let keys_yaml = serde_yaml::to_string(&keys)?;
-    fs::write(&keys_file_path, keys_yaml)?;
-
-    println!("✅ Configuration file '{}' created successfully.", config_path.display());
-    println!(
-        "✅ Encryption key generated and saved to {}",
-        keys_file_path.display()
-    );
-    println!("🎉 Setup complete!");
-    println!("📋 Next steps:");
-    println!("1. Add the following environment variable to ~/.mobile-secrets/CI/secrets/{repo_name}/env for CI:");
-    println!();
-    println!("   export {ENV_VAR_KEY}=\"{key_b64}\"");
-    println!();
-    println!("2. Commit and push the changes to `~/.mobile-secrets`'s `trunk` branch directly.");
-    println!("3. Edit {} to specify which secret files you want to sync for your repository.", config_path.display());
-    println!("4. Run `a8c-secrets update` to encrypt those secrets files into your repository.");
-
     Ok(())
 }
 
