@@ -23,23 +23,12 @@ a8c-secrets - Automattic Secrets Management Tool
 
 This tool manages encrypted secret files in your repository. It provides a secure workflow for:
 
-• Setting up or validating secret configuration in your repository (`setup`)
-  - Use this to set up a8c-secrets configuration in your repository if it hasn't been set up before
-  - If already set up, it will validate and display the current configuration
-  - For initial setup: creates a `.a8c-secrets/config.yaml` config file and generates a unique encryption key
-  - For existing setup: validates the configuration and shows current status
+• Setting up or validating the initial a8c-secrets configuration in your repository (`setup`)
 • Encrypting new secrets, or updating existing ones, from `~/.mobile-secrets` into your repository (`update`)
-  - Use this to encrypt the latest version of secret files from `~/.mobile-secrets` as `.a8c-secrets/*.enc` encrypted files in your repository
 • Decrypting secrets from `.a8c-secrets/*.enc` files for you to use in local development or CI (`apply`)
-  - Use this to decrypt the encrypted `.a8c-secrets/*.enc` files before you can compile your project locally or in CI
 
 The tool uses AES-256-GCM encryption with unique keys per repository, stored in `~/.mobile-secrets/a8c-secrets-encryption-keys.yaml`.
 Each project maintains a `.a8c-secrets/config.yaml` configuration file that tracks which secrets to sync and where to place them when decrypted.
-
-Workflow:
-1. Run `setup` in a project to create configuration and generate encryption key (or validate existing setup)
-2. Run `update` to encrypt latest secrets from `~/.mobile-secrets` into the project (when you want to encrypt new secrets or update existing ones)
-3. Run `apply` to decrypt secrets for local use or CI (so that the secret files are available for your project to compile)
 "#)]
 pub struct Cli {
     #[command(subcommand)]
