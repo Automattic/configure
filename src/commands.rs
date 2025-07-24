@@ -5,11 +5,13 @@ use std::fs;
 use std::path::Path;
 
 use crate::utils::{
-    get_mobile_secrets_path, load_config, get_mobile_secrets_head_sha1, get_current_repo_name,
-    get_encryption_key_for_current_repo, generate_encryption_key, encrypt_data, decrypt_data,
+    decrypt_data, encrypt_data, generate_encryption_key, get_current_repo_name,
+    get_encryption_key_for_current_repo, get_mobile_secrets_head_sha1, get_mobile_secrets_path,
+    is_ignored_by_git, load_config,
 };
 use crate::{
-    Config, REPO_SECRETS_CONFIG_FILE, REPO_SECRETS_DIR, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, ENV_VAR_KEY
+    Config, ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, REPO_SECRETS_CONFIG_FILE,
+    REPO_SECRETS_DIR,
 };
 
 /// Sets up or validates secrets configuration for the current repository.
@@ -36,7 +38,7 @@ pub fn setup_command() -> Result<()> {
     let mobile_secrets_path = get_mobile_secrets_path()?;
     let config_path = std::path::Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
     let config_exists = config_path.exists();
-    
+
     // Check if encryption key already exists
     let repo_name = get_current_repo_name()?;
     let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
@@ -47,12 +49,18 @@ pub fn setup_command() -> Result<()> {
     } else {
         false
     };
-    
+
     // If setup already exists, validate and display instead of creating
     if config_exists || key_exists {
-        return validate_and_display_setup(config_exists, key_exists, &repo_name, &keys_file_path, &config_path);
+        return validate_and_display_setup(
+            config_exists,
+            key_exists,
+            &repo_name,
+            &keys_file_path,
+            &config_path,
+        );
     }
-    
+
     // Proceed with initial setup
     perform_initial_setup(&mobile_secrets_path, &repo_name)
 }
@@ -108,7 +116,10 @@ files: []
     let keys_yaml = serde_yaml::to_string(&keys)?;
     fs::write(&keys_file_path, keys_yaml)?;
 
-    println!("✅ Configuration file '{}' created successfully.", config_path.display());
+    println!(
+        "✅ Configuration file '{}' created successfully.",
+        config_path.display()
+    );
     println!(
         "✅ Encryption key generated and saved to {}",
         keys_file_path.display()
@@ -120,7 +131,10 @@ files: []
     println!("   export {ENV_VAR_KEY}=\"{key_b64}\"");
     println!();
     println!("2. Commit and push the changes to `~/.mobile-secrets`'s `trunk` branch directly.");
-    println!("3. Edit {} to specify which secret files you want to sync for your repository.", config_path.display());
+    println!(
+        "3. Edit {} to specify which secret files you want to sync for your repository.",
+        config_path.display()
+    );
     println!("4. Run `a8c-secrets update` to encrypt those secrets files into your repository.");
 
     Ok(())
@@ -136,7 +150,7 @@ pub fn validate_and_display_setup(
 ) -> Result<()> {
     println!("🔍 Existing setup detected - validating configuration...");
     println!();
-    
+
     // Validate and display config file
     if config_exists {
         match load_config() {
@@ -145,7 +159,10 @@ pub fn validate_and_display_setup(
                 println!("   📋 SHA1: {}", config.sha1);
                 println!("   📁 Secret files configured: {}", config.files.len());
                 if config.files.is_empty() {
-                    println!("   ⚠️  No secret files configured yet - edit {} to add them", config_path.display());
+                    println!(
+                        "   ⚠️  No secret files configured yet - edit {} to add them",
+                        config_path.display()
+                    );
                 } else {
                     for (i, file) in config.files.iter().enumerate() {
                         println!("   {}. {} → {}", i + 1, file.source, file.destination);
@@ -154,16 +171,16 @@ pub fn validate_and_display_setup(
             }
             Err(e) => {
                 println!("❌ Configuration file: {}", config_path.display());
-                println!("   Error: Invalid YAML structure - {}", e);
+                println!("   Error: Invalid YAML structure - {e}");
                 return Err(anyhow!("Configuration file validation failed: {}", e));
             }
         }
     } else {
         println!("❌ Configuration file: {} (missing)", config_path.display());
     }
-    
+
     println!();
-    
+
     // Display encryption key status
     if key_exists {
         println!("✅ Encryption key: Found for repository '{repo_name}'");
@@ -177,9 +194,9 @@ pub fn validate_and_display_setup(
             println!("   📍 Keys file missing: {}", keys_file_path.display());
         }
     }
-    
+
     println!();
-    
+
     // Summary and recommendations
     match (config_exists, key_exists) {
         (true, true) => {
@@ -187,17 +204,23 @@ pub fn validate_and_display_setup(
             println!("   You can now run 'update' to encrypt secrets or 'apply' to decrypt them.");
         }
         (true, false) => {
-            println!("⚠️  Setup is incomplete: Configuration exists but encryption key is missing.");
+            println!(
+                "⚠️  Setup is incomplete: Configuration exists but encryption key is missing."
+            );
             println!("   Please run this command in a fresh directory to generate a new key,");
             println!("   or manually add the key to {}", keys_file_path.display());
         }
         (false, true) => {
-            println!("⚠️  Setup is incomplete: Encryption key exists but configuration is missing.");
-            println!("   Please run this command in a fresh directory to create the configuration.");
+            println!(
+                "⚠️  Setup is incomplete: Encryption key exists but configuration is missing."
+            );
+            println!(
+                "   Please run this command in a fresh directory to create the configuration."
+            );
         }
         (false, false) => unreachable!("This case is handled by initial setup"),
     }
-    
+
     Ok(())
 }
 
@@ -230,13 +253,18 @@ pub fn update_command() -> Result<()> {
 
     if config.files.is_empty() {
         println!("⚠️  No secret files configured for encryption.");
-        println!("Edit {} to add files to sync.", Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE).display());
+        println!(
+            "Edit {} to add files to sync.",
+            Path::new(REPO_SECRETS_DIR)
+                .join(REPO_SECRETS_CONFIG_FILE)
+                .display()
+        );
         return Ok(());
     }
 
     for file_config in &config.files {
         let source_path = mobile_secrets_path.join(&file_config.source);
-        
+
         if !source_path.exists() {
             return Err(anyhow!(
                 "Source file not found: {}\n\n\
@@ -248,37 +276,84 @@ pub fn update_command() -> Result<()> {
                 3. You have read permissions for the file",
                 file_config.source,
                 source_path.display(),
-                Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE).display(),
+                Path::new(REPO_SECRETS_DIR)
+                    .join(REPO_SECRETS_CONFIG_FILE)
+                    .display(),
                 file_config.source
             ));
         }
 
-        let content = fs::read(&source_path)
-            .map_err(|e| anyhow!(
+        // Check if the destination file would be ignored by git
+        match is_ignored_by_git(&file_config.destination) {
+            Ok(false) => {
+                return Err(anyhow!(
+                    "⚠️  SECURITY WARNING: Destination file '{}' is NOT ignored by git!\n\n\
+                    This means the decrypted secret file could be accidentally committed to your repository,\n\
+                    which would expose your secrets in version control.\n\n\
+                    To fix this issue:\n\
+                    1. Add '{}' to your .gitignore file, OR\n\
+                    2. Change the destination path to a location outside your repository, OR\n\
+                    3. Change the destination path to a location that's already git-ignored\n\n\
+                    Example .gitignore entries:\n\
+                    # Ignore this specific file\n\
+                    {}\n\
+                    # Or ignore all secret files in a directory\n\
+                    secrets/\n\
+                    *.secret\n\n\
+                    After updating .gitignore, run 'git check-ignore {}' to verify it's ignored.",
+                    file_config.destination,
+                    file_config.destination,
+                    file_config.destination,
+                    file_config.destination
+                ));
+            }
+            Ok(true) => {
+                // File is properly ignored, continue
+            }
+            Err(e) => {
+                // Git check failed, but we'll warn and continue (not everyone uses git)
+                eprintln!(
+                    "⚠️  Warning: Could not check if '{}' is ignored by git: {}",
+                    file_config.destination, e
+                );
+                eprintln!(
+                    "   Make sure your secret files are properly ignored by version control."
+                );
+            }
+        }
+
+        let content = fs::read(&source_path).map_err(|e| {
+            anyhow!(
                 "Failed to read source file {}: {}\n\n\
                 Please check that you have read permissions for the file.",
-                source_path.display(), e
-            ))?;
+                source_path.display(),
+                e
+            )
+        })?;
 
         let encrypted = encrypt_data(&content, &key)?;
 
         let dest_filename = Path::new(&file_config.source)
             .file_name()
-            .ok_or_else(|| anyhow!(
-                "Invalid source path '{}': cannot extract filename.\n\n\
+            .ok_or_else(|| {
+                anyhow!(
+                    "Invalid source path '{}': cannot extract filename.\n\n\
                 The source path must point to a file, not a directory.",
-                file_config.source
-            ))?
+                    file_config.source
+                )
+            })?
             .to_string_lossy();
         let encrypted_path = format!("{REPO_SECRETS_DIR}/{dest_filename}.enc");
 
-        fs::write(&encrypted_path, encrypted)
-            .map_err(|e| anyhow!(
+        fs::write(&encrypted_path, encrypted).map_err(|e| {
+            anyhow!(
                 "Failed to write encrypted file {}: {}\n\n\
                 Please check that you have write permissions in the current directory.",
-                encrypted_path, e
-            ))?;
-        
+                encrypted_path,
+                e
+            )
+        })?;
+
         println!("Encrypted {} -> {}", file_config.source, encrypted_path);
     }
 
@@ -303,18 +378,25 @@ pub fn apply_command() -> Result<()> {
 
     if config.files.is_empty() {
         println!("⚠️  No secret files configured for decryption.");
-        println!("Edit {} to add files to sync.", Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE).display());
+        println!(
+            "Edit {} to add files to sync.",
+            Path::new(REPO_SECRETS_DIR)
+                .join(REPO_SECRETS_CONFIG_FILE)
+                .display()
+        );
         return Ok(());
     }
 
     for file_config in &config.files {
         let source_filename = Path::new(&file_config.source)
             .file_name()
-            .ok_or_else(|| anyhow!(
-                "Invalid source path '{}': cannot extract filename.\n\n\
+            .ok_or_else(|| {
+                anyhow!(
+                    "Invalid source path '{}': cannot extract filename.\n\n\
                 The source path must point to a file, not a directory.",
-                file_config.source
-            ))?
+                    file_config.source
+                )
+            })?
             .to_string_lossy();
         let encrypted_path = format!("{REPO_SECRETS_DIR}/{source_filename}.enc");
 
@@ -335,40 +417,48 @@ pub fn apply_command() -> Result<()> {
             ));
         }
 
-        let encrypted = fs::read(&encrypted_path)
-            .map_err(|e| anyhow!(
+        let encrypted = fs::read(&encrypted_path).map_err(|e| {
+            anyhow!(
                 "Failed to read encrypted file {}: {}\n\n\
                 Please check that you have read permissions for the file.",
-                encrypted_path, e
-            ))?;
+                encrypted_path,
+                e
+            )
+        })?;
 
-        let decrypted = decrypt_data(&encrypted, &key)
-            .map_err(|e| anyhow!(
+        let decrypted = decrypt_data(&encrypted, &key).map_err(|e| {
+            anyhow!(
                 "Failed to decrypt file {}: {}\n\n\
                 This could indicate:\n\
                 1. The file was corrupted\n\
                 2. Wrong encryption key for this repository\n\
                 3. The file was not encrypted with a8c-secrets",
-                encrypted_path, e
-            ))?;
+                encrypted_path,
+                e
+            )
+        })?;
 
         // Ensure destination directory exists
         if let Some(parent) = Path::new(&file_config.destination).parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| anyhow!(
+            fs::create_dir_all(parent).map_err(|e| {
+                anyhow!(
                     "Failed to create destination directory {}: {}\n\n\
                     Please check that you have write permissions.",
-                    parent.display(), e
-                ))?;
+                    parent.display(),
+                    e
+                )
+            })?;
         }
 
-        fs::write(&file_config.destination, decrypted)
-            .map_err(|e| anyhow!(
+        fs::write(&file_config.destination, decrypted).map_err(|e| {
+            anyhow!(
                 "Failed to write decrypted file {}: {}\n\n\
                 Please check that you have write permissions for the destination.",
-                file_config.destination, e
-            ))?;
-        
+                file_config.destination,
+                e
+            )
+        })?;
+
         println!(
             "Decrypted {} -> {}",
             encrypted_path, file_config.destination

@@ -5,7 +5,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::{
-    Config, REPO_SECRETS_CONFIG_FILE, REPO_SECRETS_DIR, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, ENV_VAR_KEY
+    Config, ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, REPO_SECRETS_CONFIG_FILE,
+    REPO_SECRETS_DIR,
 };
 
 /// Gets the path to the ~/.mobile-secrets directory.
@@ -25,7 +26,7 @@ pub fn get_mobile_secrets_path() -> Result<PathBuf> {
 /// - `Err(anyhow::Error)` if the file doesn't exist, can't be read, or contains invalid YAML
 pub fn load_config() -> Result<Config> {
     let config_path = Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
-    
+
     if !config_path.exists() {
         return Err(anyhow!(
             "Configuration file not found: {}\n\n\
@@ -34,25 +35,29 @@ pub fn load_config() -> Result<Config> {
             config_path.display()
         ));
     }
-    
-    let config_content = fs::read_to_string(&config_path)
-        .map_err(|e| anyhow!(
+
+    let config_content = fs::read_to_string(&config_path).map_err(|e| {
+        anyhow!(
             "Failed to read configuration file {}: {}\n\n\
             Please check that the file exists and you have read permissions.",
-            config_path.display(), e
-        ))?;
-    
-    let config: Config = serde_yaml::from_str(&config_content)
-        .map_err(|e| anyhow!(
+            config_path.display(),
+            e
+        )
+    })?;
+
+    let config: Config = serde_yaml::from_str(&config_content).map_err(|e| {
+        anyhow!(
             "Invalid YAML syntax in configuration file {}: {}\n\n\
             Please check the file format. Expected structure:\n\
             sha1: <git-sha1>\n\
             files:\n\
             - source: path/to/source.file\n\
               destination: path/to/destination.file",
-            config_path.display(), e
-        ))?;
-    
+            config_path.display(),
+            e
+        )
+    })?;
+
     Ok(config)
 }
 
@@ -95,12 +100,14 @@ pub fn get_current_repo_name() -> Result<String> {
 pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
     // Try to get encryption key from environment variable first
     if let Ok(key_b64) = std::env::var(ENV_VAR_KEY) {
-        return general_purpose::STANDARD.decode(key_b64)
-            .map_err(|e| anyhow!(
+        return general_purpose::STANDARD.decode(key_b64).map_err(|e| {
+            anyhow!(
                 "Invalid base64 encoding in {} environment variable: {}\n\n\
                 The encryption key must be a valid base64-encoded string.",
-                ENV_VAR_KEY, e
-            ));
+                ENV_VAR_KEY,
+                e
+            )
+        });
     }
 
     // Otherwise, load from keys file
@@ -119,24 +126,27 @@ pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
         ));
     }
 
-    let keys_content = fs::read_to_string(&keys_file_path)
-        .map_err(|e| anyhow!(
+    let keys_content = fs::read_to_string(&keys_file_path).map_err(|e| {
+        anyhow!(
             "Failed to read encryption keys file {}: {}\n\n\
             Please check that the file exists and you have read permissions.",
-            keys_file_path.display(), e
-        ))?;
+            keys_file_path.display(),
+            e
+        )
+    })?;
 
-    let keys: HashMap<String, String> = serde_yaml::from_str(&keys_content)
-        .map_err(|e| anyhow!(
+    let keys: HashMap<String, String> = serde_yaml::from_str(&keys_content).map_err(|e| {
+        anyhow!(
             "Invalid YAML syntax in encryption keys file {}: {}\n\n\
             The file should contain a mapping of repository names to base64-encoded keys.",
-            keys_file_path.display(), e
-        ))?;
+            keys_file_path.display(),
+            e
+        )
+    })?;
 
     let repo_name = get_current_repo_name()?;
-    let key_b64 = keys
-        .get(&repo_name)
-        .ok_or_else(|| anyhow!(
+    let key_b64 = keys.get(&repo_name).ok_or_else(|| {
+        anyhow!(
             "No encryption key found for repository '{}' in {}.\n\n\
             Available repositories: {}\n\n\
             Run 'a8c-secrets setup' to generate an encryption key for this repository.",
@@ -147,14 +157,18 @@ pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
             } else {
                 keys.keys().cloned().collect::<Vec<_>>().join(", ")
             }
-        ))?;
+        )
+    })?;
 
-    general_purpose::STANDARD.decode(key_b64)
-        .map_err(|e| anyhow!(
+    general_purpose::STANDARD.decode(key_b64).map_err(|e| {
+        anyhow!(
             "Invalid base64 encoding for repository '{}' in {}: {}\n\n\
             The encryption key must be a valid base64-encoded string.",
-            repo_name, keys_file_path.display(), e
-        ))
+            repo_name,
+            keys_file_path.display(),
+            e
+        )
+    })
 }
 
 /// Generates a cryptographically secure random 256-bit (32-byte) encryption key.
@@ -246,4 +260,34 @@ pub fn decrypt_data(encrypted_data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
         .map_err(|e| anyhow!("Decryption failed: {}", e))?;
 
     Ok(plaintext)
+}
+
+/// Checks if a file path would be ignored by git using git2.
+///
+/// # Arguments
+/// - `file_path` - The path to check (relative to the repository root)
+///
+/// # Returns
+/// - `Ok(true)` if the file would be ignored by git
+/// - `Ok(false)` if the file would NOT be ignored by git
+/// - `Err(anyhow::Error)` if there's no git repository or other git errors
+pub fn is_ignored_by_git(file_path: &str) -> Result<bool> {
+    let repo = git2::Repository::open(".").map_err(|e| {
+        anyhow!(
+            "Failed to open git repository: {}\n\n\
+            Make sure you're running this command from within a git repository.",
+            e
+        )
+    })?;
+
+    let is_ignored = repo.is_path_ignored(Path::new(file_path)).map_err(|e| {
+        anyhow!(
+            "Failed to check if path '{}' is ignored by git: {}\n\n\
+            This could indicate a problem with the git repository or the file path.",
+            file_path,
+            e
+        )
+    })?;
+
+    Ok(is_ignored)
 }
