@@ -135,7 +135,7 @@ files: []
         "3. Edit {} to specify which secret files you want to sync for your repository.",
         config_path.display()
     );
-    println!("4. Run `a8c-secrets update` to encrypt those secrets files into your repository.");
+    println!("4. Run `a8c-secrets encrypt` to encrypt those secrets files into your repository.");
 
     Ok(())
 }
@@ -201,7 +201,7 @@ pub fn validate_and_display_setup(
     match (config_exists, key_exists) {
         (true, true) => {
             println!("🎉 Setup is complete and valid!");
-            println!("   You can now run 'update' to encrypt secrets or 'apply' to decrypt them.");
+            println!("   You can now run 'encrypt' to encrypt secrets or 'decrypt' to decrypt them.");
         }
         (true, false) => {
             println!(
@@ -224,7 +224,7 @@ pub fn validate_and_display_setup(
     Ok(())
 }
 
-/// Updates encrypted secrets from ~/.mobile-secrets into the current repository.
+/// Encrypts secrets from ~/.mobile-secrets into the current repository.
 ///
 /// This function:
 /// - Loads the current `.a8c-secrets/config.yaml` configuration
@@ -235,7 +235,7 @@ pub fn validate_and_display_setup(
 /// # Returns
 /// - `Ok(())` if all secrets are successfully encrypted and saved
 /// - `Err(anyhow::Error)` if configuration loading, encryption, or file I/O fails
-pub fn update_command() -> Result<()> {
+pub fn encrypt_command() -> Result<()> {
     let mobile_secrets_path = get_mobile_secrets_path()?;
     
     // Check if mobile-secrets repository is up-to-date
@@ -340,7 +340,7 @@ pub fn update_command() -> Result<()> {
 /// # Returns
 /// - `Ok(())` if all secrets are successfully decrypted and written
 /// - `Err(anyhow::Error)` if key retrieval, decryption, or file I/O fails
-pub fn apply_command() -> Result<()> {
+pub fn decrypt_command() -> Result<()> {
     let config = load_config()?;
     let key = get_encryption_key_for_current_repo()?;
 
@@ -378,7 +378,7 @@ pub fn apply_command() -> Result<()> {
                 Source configured as: {}\n\
                 Destination configured as: {}\n\n\
                 This usually means:\n\
-                1. The encrypted file hasn't been created yet - run 'a8c-secrets update' first\n\
+                1. The encrypted file hasn't been created yet - run 'a8c-secrets encrypt' first\n\
                 2. The source filename in the configuration is incorrect\n\
                 3. The encrypted file was manually deleted",
                 source_filename,
