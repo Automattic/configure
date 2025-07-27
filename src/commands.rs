@@ -3,6 +3,7 @@ use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use tracing::{debug, info};
 
 use crate::crypto::{
     decrypt_data, encrypt_data, generate_encryption_key, get_encryption_key_for_current_repo,
@@ -38,14 +39,21 @@ use crate::{
 /// - `Ok(())` if setup/validation succeeds
 /// - `Err(anyhow::Error)` if any step fails (git operations, file I/O, validation errors, etc.)
 pub fn setup_command() -> Result<()> {
+    info!("Running setup command");
     let mobile_secrets_path = get_mobile_secrets_path()?;
+    debug!("Mobile secrets path: {}", mobile_secrets_path.display());
+
     let config_path = std::path::Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
     let config_exists = config_path.exists();
+    debug!("Config file exists: {}", config_exists);
 
     // Check if encryption key already exists
     let repo_name = get_current_repo_name()?;
+    debug!("Repository name: {}", repo_name);
+
     let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
     let key_exists = if keys_file_path.exists() {
+        debug!("Keys file exists, checking for repository key");
         let keys_content = fs::read_to_string(&keys_file_path)?;
         let keys: HashMap<String, String> = serde_yaml::from_str(&keys_content).map_err(|e| {
             anyhow!(
@@ -55,8 +63,11 @@ pub fn setup_command() -> Result<()> {
                 e
             )
         })?;
-        keys.contains_key(&repo_name)
+        let exists = keys.contains_key(&repo_name);
+        debug!("Repository key exists: {}", exists);
+        exists
     } else {
+        debug!("Keys file does not exist");
         false
     };
 
@@ -256,12 +267,15 @@ pub fn validate_and_display_setup(
 /// - `Ok(())` if all secrets are successfully encrypted and saved
 /// - `Err(anyhow::Error)` if configuration loading, encryption, or file I/O fails
 pub fn encrypt_command() -> Result<()> {
+    info!("Running encrypt command");
     let mobile_secrets_path = get_mobile_secrets_path()?;
+    debug!("Mobile secrets path: {}", mobile_secrets_path.display());
 
     // Check if mobile-secrets repository is up-to-date
     check_mobile_secrets_up_to_date(&mobile_secrets_path)?;
 
     let mut config = load_config()?;
+    debug!("Loaded config with {} files", config.files.len());
     let key = get_encryption_key_for_current_repo()?;
 
     // Update SHA1 to current HEAD of mobile-secrets repo
@@ -287,6 +301,11 @@ pub fn encrypt_command() -> Result<()> {
     }
 
     for file_config in &config.files {
+        debug!(
+            "Processing file: {} -> {}",
+            file_config.source, file_config.destination
+        );
+
         // Validate source path
         validate_source_path(&file_config.source, &mobile_secrets_path)?;
 
@@ -358,7 +377,9 @@ pub fn encrypt_command() -> Result<()> {
 /// - `Ok(())` if all secrets are successfully decrypted and written
 /// - `Err(anyhow::Error)` if key retrieval, decryption, or file I/O fails
 pub fn decrypt_command() -> Result<()> {
+    info!("Running decrypt command");
     let config = load_config()?;
+    debug!("Loaded config with {} files", config.files.len());
     let key = get_encryption_key_for_current_repo()?;
 
     if config.files.is_empty() {
@@ -373,6 +394,11 @@ pub fn decrypt_command() -> Result<()> {
     }
 
     for file_config in &config.files {
+        debug!(
+            "Processing file: {} -> {}",
+            file_config.source, file_config.destination
+        );
+
         // Check if the destination file would be ignored by git (early validation)
         ensure_destination_is_git_ignored(&file_config.destination)?;
 

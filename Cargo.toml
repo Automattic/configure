@@ -17,6 +17,8 @@ rand = "0.8"
 sha1 = "0.10"
 git2 = "0.19"
 anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints.clippy]
 # Enable additional lint groups for better code quality (lower priority so specific lints can override)

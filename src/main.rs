@@ -33,6 +33,10 @@ The tool uses AES-256-GCM encryption with unique keys per repository, stored in 
 Each project maintains a `.a8c-secrets/config.yaml` configuration file that tracks which secrets to sync and where to place them when decrypted.
 "#)]
 pub struct Cli {
+    /// Enable verbose logging
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -123,9 +127,32 @@ pub struct SecretFileEntry {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
+    // Initialize logging
+    let log_level = if cli.verbose {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::INFO
+    };
+
+    tracing_subscriber::fmt()
+        .with_max_level(log_level)
+        .with_target(false)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .init();
+
+    tracing::info!("Starting a8c-secrets");
+
+    let result = match cli.command {
         Commands::Setup => setup_command(),
         Commands::Encrypt => encrypt_command(),
         Commands::Decrypt => decrypt_command(),
+    };
+
+    match &result {
+        Ok(()) => tracing::info!("Command completed successfully"),
+        Err(e) => tracing::error!("Command failed: {}", e),
     }
+
+    result
 }
