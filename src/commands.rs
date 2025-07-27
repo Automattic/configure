@@ -11,7 +11,7 @@ use crate::git::{
     check_mobile_secrets_up_to_date, ensure_destination_is_git_ignored, get_current_repo_name,
     get_mobile_secrets_head_sha1,
 };
-use crate::paths::{get_mobile_secrets_path, load_config};
+use crate::paths::{get_mobile_secrets_path, load_config, validate_source_path};
 use crate::{
     Config, ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, REPO_SECRETS_CONFIG_FILE,
     REPO_SECRETS_DIR,
@@ -287,25 +287,10 @@ pub fn encrypt_command() -> Result<()> {
     }
 
     for file_config in &config.files {
-        let source_path = mobile_secrets_path.join(&file_config.source);
+        // Validate source path
+        validate_source_path(&file_config.source, &mobile_secrets_path)?;
 
-        if !source_path.exists() {
-            return Err(anyhow!(
-                "Source file not found: {}\n\n\
-                Expected location: {}\n\
-                Configured in: {}\n\n\
-                Please check that:\n\
-                1. The file exists in the ~/.mobile-secrets repository\n\
-                2. The source path '{}' is correct relative to ~/.mobile-secrets\n\
-                3. You have read permissions for the file",
-                file_config.source,
-                source_path.display(),
-                Path::new(REPO_SECRETS_DIR)
-                    .join(REPO_SECRETS_CONFIG_FILE)
-                    .display(),
-                file_config.source
-            ));
-        }
+        let source_path = mobile_secrets_path.join(&file_config.source);
 
         // Check if the destination file would be ignored by git
         ensure_destination_is_git_ignored(&file_config.destination)?;
