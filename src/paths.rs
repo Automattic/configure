@@ -3,6 +3,58 @@ use std::path::{Path, PathBuf};
 
 use crate::{Config, REPO_SECRETS_CONFIG_FILE, REPO_SECRETS_DIR};
 
+/// Validates a source path relative to ~/.mobile-secrets.
+///
+/// # Arguments
+/// - `source_path` - The source path to validate
+/// - `mobile_secrets_path` - Path to the ~/.mobile-secrets directory
+///
+/// # Returns
+/// - `Ok(())` if the path is valid
+/// - `Err(anyhow::Error)` if the path is invalid
+pub fn validate_source_path(source_path: &str, mobile_secrets_path: &Path) -> Result<()> {
+    // Check for empty path
+    if source_path.trim().is_empty() {
+        return Err(anyhow!("Source path cannot be empty"));
+    }
+
+    // Check for absolute paths (should be relative to ~/.mobile-secrets)
+    if Path::new(source_path).is_absolute() {
+        return Err(anyhow!(
+            "Source path '{}' is absolute, but must be relative to ~/.mobile-secrets",
+            source_path
+        ));
+    }
+
+    // Check for path traversal attempts
+    if source_path.contains("..") {
+        return Err(anyhow!(
+            "Source path '{}' contains '..' which is not allowed for security reasons",
+            source_path
+        ));
+    }
+
+    // Check if the file exists
+    let full_source_path = mobile_secrets_path.join(source_path);
+    if !full_source_path.exists() {
+        return Err(anyhow!(
+            "Source file '{}' does not exist at {}",
+            source_path,
+            full_source_path.display()
+        ));
+    }
+
+    // Check if it's actually a file (not a directory)
+    if !full_source_path.is_file() {
+        return Err(anyhow!(
+            "Source path '{}' points to a directory, but must point to a file",
+            source_path
+        ));
+    }
+
+    Ok(())
+}
+
 /// Gets the path to the ~/.mobile-secrets directory.
 ///
 /// # Returns
