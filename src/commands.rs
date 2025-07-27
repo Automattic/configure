@@ -47,7 +47,14 @@ pub fn setup_command() -> Result<()> {
     let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
     let key_exists = if keys_file_path.exists() {
         let keys_content = fs::read_to_string(&keys_file_path)?;
-        let keys: HashMap<String, String> = serde_yaml::from_str(&keys_content).unwrap_or_default();
+        let keys: HashMap<String, String> = serde_yaml::from_str(&keys_content).map_err(|e| {
+            anyhow!(
+                "Invalid YAML syntax in encryption keys file {}: {}\n\n\
+                The file should contain a mapping of repository names to base64-encoded keys.",
+                keys_file_path.display(),
+                e
+            )
+        })?;
         keys.contains_key(&repo_name)
     } else {
         false
@@ -110,7 +117,14 @@ files: []
     let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
     let mut keys: HashMap<String, String> = if keys_file_path.exists() {
         let keys_content = fs::read_to_string(&keys_file_path)?;
-        serde_yaml::from_str(&keys_content).unwrap_or_default()
+        serde_yaml::from_str(&keys_content).map_err(|e| {
+            anyhow!(
+                "Invalid YAML syntax in encryption keys file {}: {}\n\n\
+                The file should contain a mapping of repository names to base64-encoded keys.",
+                keys_file_path.display(),
+                e
+            )
+        })?
     } else {
         HashMap::new()
     };
