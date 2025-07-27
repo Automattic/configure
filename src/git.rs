@@ -1,6 +1,26 @@
 use anyhow::{anyhow, Result};
 use std::path::Path;
 
+/// Validates that the repository is not in a detached HEAD state.
+///
+/// # Arguments
+/// - `head` - The HEAD reference from the repository
+///
+/// # Returns
+/// - `Ok(())` if the repository is on a proper branch
+/// - `Err(anyhow::Error)` if the repository is in detached HEAD state
+fn validate_not_detached_head(head: &git2::Reference) -> Result<()> {
+    if head.kind() == Some(git2::ReferenceType::Direct) {
+        return Err(anyhow!(
+            "The ~/.mobile-secrets repository is in a detached HEAD state.\n\n\
+            This usually happens when you've checked out a specific commit instead of a branch.\n\n\
+            To fix this, run:\n\
+            cd ~/.mobile-secrets && git checkout trunk"
+        ));
+    }
+    Ok(())
+}
+
 /// Gets the SHA1 hash of the current HEAD commit in the ~/.mobile-secrets repository.
 ///
 /// # Arguments
@@ -8,10 +28,14 @@ use std::path::Path;
 ///
 /// # Returns
 /// - `Ok(String)` containing the SHA1 hash of the HEAD commit
-/// - `Err(anyhow::Error)` if the repository can't be opened or HEAD can't be resolved
+/// - `Err(anyhow::Error)` if the repository can't be opened, HEAD can't be resolved, or repository is in detached HEAD state
 pub fn get_mobile_secrets_head_sha1(mobile_secrets_path: &Path) -> Result<String> {
     let repo = git2::Repository::open(mobile_secrets_path)?;
     let head = repo.head()?;
+
+    // Check if we're in a detached HEAD state
+    validate_not_detached_head(&head)?;
+
     let commit = head.peel_to_commit()?;
     Ok(commit.id().to_string())
 }
@@ -55,6 +79,10 @@ pub fn check_mobile_secrets_up_to_date(mobile_secrets_path: &Path) -> Result<()>
 
     // Get the current HEAD commit
     let head = repo.head()?;
+
+    // Check if we're in a detached HEAD state
+    validate_not_detached_head(&head)?;
+
     let head_commit = head.peel_to_commit()?;
 
     // Get the remote trunk commit
