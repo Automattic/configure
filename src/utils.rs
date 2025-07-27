@@ -262,16 +262,18 @@ pub fn decrypt_data(encrypted_data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     Ok(plaintext)
 }
 
-/// Checks if a file path would be ignored by git using git2.
+/// Ensures that a destination file path is ignored by git.
+///
+/// This function checks if the destination file would be ignored by git to prevent
+/// accidentally committing decrypted secret files to version control.
 ///
 /// # Arguments
-/// - `file_path` - The path to check (relative to the repository root)
+/// - `destination_path` - The path to the destination file to validate
 ///
 /// # Returns
-/// - `Ok(true)` if the file would be ignored by git
-/// - `Ok(false)` if the file would NOT be ignored by git
-/// - `Err(anyhow::Error)` if there's no git repository or other git errors
-pub fn is_ignored_by_git(file_path: &str) -> Result<bool> {
+/// - `Ok(())` if the file is properly ignored
+/// - `Err(anyhow::Error)` if the file is not ignored or validation fails
+pub fn ensure_destination_is_git_ignored(destination_path: &str) -> Result<()> {
     let repo = git2::Repository::open(".").map_err(|e| {
         anyhow!(
             "Failed to open git repository: {}\n\n\
@@ -280,14 +282,34 @@ pub fn is_ignored_by_git(file_path: &str) -> Result<bool> {
         )
     })?;
 
-    let is_ignored = repo.is_path_ignored(Path::new(file_path)).map_err(|e| {
+    let is_ignored = repo.is_path_ignored(Path::new(destination_path)).map_err(|e| {
         anyhow!(
             "Failed to check if path '{}' is ignored by git: {}\n\n\
             This could indicate a problem with the git repository or the file path.",
-            file_path,
+            destination_path,
             e
         )
     })?;
 
-    Ok(is_ignored)
+    if is_ignored {
+        // File is properly ignored, continue
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "⚠️  SECURITY ERROR: Destination file '{}' is NOT ignored by git!\n\n\
+            Refusing to create decrypted secret file that could be accidentally committed.\n\n\
+            To fix this issue:\n\
+            1. Add '{}' to your .gitignore file, OR\n\
+            2. Change the destination path to a location outside your repository, OR\n\
+            3. Change the destination path to a location that's already git-ignored\n\n\
+            Example .gitignore entries:\n\
+            # Ignore this specific file\n\
+            {}\n\
+            # Or ignore all secret files in a directory\n\
+            secrets/\n\
+            *.secret\n\n\
+            After updating .gitignore, run 'git check-ignore {}' to verify it's ignored.",
+            destination_path, destination_path, destination_path, destination_path
+        ))
+    }
 }
