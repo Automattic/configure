@@ -49,7 +49,7 @@ For initial setup:
 • Creates a `.a8c-secrets/config.yaml` configuration file in the current directory
 • Generates a unique AES-256 encryption key for this repository
 • Stores the key in `~/.mobile-secrets/a8c-secrets-encryption-keys.yaml`
-• Provides instructions for setting up the key in CI/CD environments
+• Provides instructions for setting up the key in CI environments
 
 For existing setup:
 • Validates the `.a8c-secrets/config.yaml` configuration file structure
@@ -67,10 +67,10 @@ specify which secret files to sync from ~/.mobile-secrets.
         long_about = r#"Encrypt secrets from `~/.mobile-secrets` into the current repository.
 
 This command:
-• Updates the SHA1 in `.a8c-secrets/config.yaml` to match current `~/.mobile-secrets` HEAD
-• Reads each secret file specified in the configuration from `~/.mobile-secrets`
-• Encrypts the content using AES-256-GCM with the repository's unique key
-• Saves encrypted files as `.a8c-secrets/*.enc` in the current repository
+• Updates the SHA1 in `.a8c-secrets/config.yaml` to match current `~/.mobile-secrets` git HEAD SHA1
+• Reads each input secret file (specified in the configuration) from `~/.mobile-secrets`
+• Encrypts their content using AES-256-GCM, using the repository's unique key
+• Saves the encrypted data as `.a8c-secrets/*.enc` files in the current repository
 
 Run this command whenever you want to encrypt new secrets or update the encrypted secrets in your
 repository with the latest versions from `~/.mobile-secrets`.
@@ -83,14 +83,15 @@ repository with the latest versions from `~/.mobile-secrets`.
         long_about = r#"Decrypt secrets from `.a8c-secrets/*.enc` files to their destinations.
 
 This command:
-• Reads the `.a8c-secrets/config.yaml` configuration
+• Reads the `.a8c-secrets/config.yaml` configuration file
 • Decrypts each `.a8c-secrets/*.enc` file using the repository's encryption key
-• Writes decrypted content to the destination paths specified in the config
-• Creates destination directories as needed
+• Writes the decrypted content to the destination paths specified in the config
+
+It creates any missing destination directories as needed.
 
 The decryption key is obtained from:
-1. A8C_SECRETS_ENCRYPTION_KEY environment variable (preferred for CI)
-2. Or `~/.mobile-secrets/a8c-secrets-encryption-keys.yaml` (for local development when the environment variable is not set)
+1. The `A8C_SECRETS_ENCRYPTION_KEY` environment variable (preferred for CI) if it exists
+2. Or reading it from `~/.mobile-secrets/a8c-secrets-encryption-keys.yaml` (for local development when the environment variable is not set)
 
 Use this command in local development or CI to make the secret files decrypted and available in the right places before compilation.
 "#
