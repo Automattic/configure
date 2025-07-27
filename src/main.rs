@@ -3,7 +3,9 @@ use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
 mod commands;
-mod utils;
+mod crypto;
+mod git;
+mod paths;
 
 use commands::{decrypt_command, encrypt_command, setup_command};
 
