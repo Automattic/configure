@@ -330,7 +330,13 @@ pub fn encrypt_command() -> Result<()> {
                     file_config.source
                 )
             })?
-            .to_string_lossy();
+            .to_str()
+            .ok_or_else(|| {
+                anyhow!(
+                    "Invalid source path '{}': filename contains invalid UTF-8 characters",
+                    file_config.source
+                )
+            })?;
         let encrypted_path = format!("{REPO_SECRETS_DIR}/{dest_filename}.enc");
 
         fs::write(&encrypted_path, encrypted).map_err(|e| {
@@ -394,7 +400,13 @@ pub fn decrypt_command() -> Result<()> {
                     file_config.source
                 )
             })?
-            .to_string_lossy();
+            .to_str()
+            .ok_or_else(|| {
+                anyhow!(
+                    "Invalid source path '{}': filename contains invalid UTF-8 characters",
+                    file_config.source
+                )
+            })?;
         let encrypted_path = format!("{REPO_SECRETS_DIR}/{source_filename}.enc");
 
         if !Path::new(&encrypted_path).exists() {
