@@ -5,9 +5,9 @@ use std::fs;
 use std::path::Path;
 
 use crate::utils::{
-    decrypt_data, encrypt_data, generate_encryption_key, get_current_repo_name,
-    get_encryption_key_for_current_repo, get_mobile_secrets_head_sha1, get_mobile_secrets_path,
-    load_config, ensure_destination_is_git_ignored,
+    check_mobile_secrets_up_to_date, decrypt_data, encrypt_data, generate_encryption_key,
+    get_current_repo_name, get_encryption_key_for_current_repo, get_mobile_secrets_head_sha1,
+    get_mobile_secrets_path, load_config, ensure_destination_is_git_ignored,
 };
 use crate::{
     Config, ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, REPO_SECRETS_CONFIG_FILE,
@@ -237,6 +237,10 @@ pub fn validate_and_display_setup(
 /// - `Err(anyhow::Error)` if configuration loading, encryption, or file I/O fails
 pub fn update_command() -> Result<()> {
     let mobile_secrets_path = get_mobile_secrets_path()?;
+    
+    // Check if mobile-secrets repository is up-to-date
+    check_mobile_secrets_up_to_date(&mobile_secrets_path)?;
+    
     let mut config = load_config()?;
     let key = get_encryption_key_for_current_repo()?;
 

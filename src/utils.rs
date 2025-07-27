@@ -262,6 +262,66 @@ pub fn decrypt_data(encrypted_data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     Ok(plaintext)
 }
 
+/// Checks if the mobile-secrets repository is up-to-date with its remote.
+///
+/// This function checks if the local ~/.mobile-secrets repository is behind its remote
+/// and provides a warning to the user if updates are available.
+///
+/// # Arguments
+/// - `mobile_secrets_path` - Path to the ~/.mobile-secrets directory
+///
+/// # Returns
+/// - `Ok(())` if the repository is up-to-date or the user chooses to continue
+/// - `Err(anyhow::Error)` if the user chooses to abort or there's an error
+pub fn check_mobile_secrets_up_to_date(mobile_secrets_path: &Path) -> Result<()> {
+    let repo = git2::Repository::open(mobile_secrets_path)?;
+    
+    // Fetch the latest changes from remote
+    let mut remote = repo.find_remote("origin")?;
+    remote.fetch(&["trunk"], None, None)?;
+    
+    // Get the current HEAD commit
+    let head = repo.head()?;
+    let head_commit = head.peel_to_commit()?;
+    
+    // Get the remote trunk commit
+    let trunk_ref = repo.find_reference("refs/remotes/origin/trunk")?;
+    let trunk_commit = trunk_ref.peel_to_commit()?;
+    
+    // Check if we're behind the remote trunk
+    let commits_behind = repo.graph_ahead_behind(head_commit.id(), trunk_commit.id())?.1;
+    
+    if commits_behind > 0 {
+        println!("⚠️  Warning: Your ~/.mobile-secrets repository is {} commit(s) behind origin/trunk.", commits_behind);
+        println!("   This means you might be encrypting outdated secrets.");
+        println!();
+        println!("   To update to the latest version, run:");
+        println!("   cd ~/.mobile-secrets && git checkout trunk && git pull");
+        println!();
+        
+        // Ask user if they want to continue
+        println!("   Do you want to continue with the current version? (y/N)");
+        
+        let mut input = String::new();
+        if std::io::stdin().read_line(&mut input).is_ok() {
+            let input = input.trim().to_lowercase();
+            if input == "y" || input == "yes" {
+                println!("   Continuing with current version...");
+                return Ok(());
+            } else {
+                return Err(anyhow!(
+                    "Update cancelled. Please update ~/.mobile-secrets first:\n\
+                    cd ~/.mobile-secrets && git checkout trunk && git pull"
+                ));
+            }
+        } else {
+            return Err(anyhow!("Failed to read user input. Please update ~/.mobile-secrets first."));
+        }
+    }
+
+    Ok(())
+}
+
 /// Ensures that a destination file path is ignored by git.
 ///
 /// This function checks if the destination file would be ignored by git to prevent
