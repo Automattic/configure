@@ -104,11 +104,11 @@ Use this command in local development or CI to make the secret files decrypted a
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub sha1: String,
-    pub files: Vec<SecretFile>,
+    pub files: Vec<SecretFileEntry>,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SecretFile {
+pub struct SecretFileEntry {
     pub source: String,
     pub destination: String,
 }
