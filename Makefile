@@ -72,19 +72,6 @@ quick: fmt lint ## Quick development check (format + lint)
 ci: fmt-check lint test build ## CI-like check (what CI would run)
 	@echo "✅ All CI checks passed!"
 
-# Help targets for CLI usage
-help-cli: build ## Show CLI help
-	./target/debug/a8c-secrets --help
-
-help-setup: build ## Show help for setup subcommand
-	./target/debug/a8c-secrets setup --help
-
-help-update: build ## Show help for update subcommand
-	./target/debug/a8c-secrets update --help
-
-help-apply: build ## Show help for apply subcommand
-	./target/debug/a8c-secrets apply --help
-
 # Binary size analysis
 size: build-release ## Show binary size information
 	@echo "Binary sizes:"
@@ -92,10 +79,3 @@ size: build-release ## Show binary size information
 	@echo "Stripped size:"
 	@strip target/release/a8c-secrets
 	@ls -lh target/release/a8c-secrets
-
-# Example usage commands (for testing during development)
-example-setup: build ## Example: Set up secrets in current directory
-	./target/debug/a8c-secrets setup
-
-example-help: build ## Example: Show comprehensive help
-	./target/debug/a8c-secrets --help
