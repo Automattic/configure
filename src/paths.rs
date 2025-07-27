@@ -1,9 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
 
-use crate::{
-    Config, REPO_SECRETS_CONFIG_FILE, REPO_SECRETS_DIR,
-};
+use crate::{Config, REPO_SECRETS_CONFIG_FILE, REPO_SECRETS_DIR};
 
 /// Gets the path to the ~/.mobile-secrets directory.
 ///

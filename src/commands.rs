@@ -205,7 +205,9 @@ pub fn validate_and_display_setup(
     match (config_exists, key_exists) {
         (true, true) => {
             println!("🎉 Setup is complete and valid!");
-            println!("   You can now run 'encrypt' to encrypt secrets or 'decrypt' to decrypt them.");
+            println!(
+                "   You can now run 'encrypt' to encrypt secrets or 'decrypt' to decrypt them."
+            );
         }
         (true, false) => {
             println!(
@@ -241,10 +243,10 @@ pub fn validate_and_display_setup(
 /// - `Err(anyhow::Error)` if configuration loading, encryption, or file I/O fails
 pub fn encrypt_command() -> Result<()> {
     let mobile_secrets_path = get_mobile_secrets_path()?;
-    
+
     // Check if mobile-secrets repository is up-to-date
     check_mobile_secrets_up_to_date(&mobile_secrets_path)?;
-    
+
     let mut config = load_config()?;
     let key = get_encryption_key_for_current_repo()?;
 
@@ -331,7 +333,9 @@ pub fn encrypt_command() -> Result<()> {
 
     println!("✅ Encryption of secrets files from `~/.mobile-secrets` into `.enc` files in your repository is complete!");
     println!("✅ You can now commit and push the changes to the `.enc` files in your repository,");
-    println!("   and run `a8c-secrets decrypt` to decrypt them to their configured local destination.");
+    println!(
+        "   and run `a8c-secrets decrypt` to decrypt them to their configured local destination."
+    );
 
     Ok(())
 }
