@@ -119,7 +119,7 @@ pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
             "No encryption key available for this repository.\n\n\
             Neither {} environment variable is set nor {} exists.\n\n\
             For local development: Run 'a8c-secrets setup' to generate an encryption key.\n\
-            For CI/CD: Set the {} environment variable with the repository's encryption key.",
+            For CI: Set the {} environment variable with the repository's encryption key.",
             ENV_VAR_KEY,
             keys_file_path.display(),
             ENV_VAR_KEY

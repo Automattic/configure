@@ -24,7 +24,7 @@ use crate::{
 /// - Creates a `.a8c-secrets/config.yaml` configuration file with the current SHA1 of ~/.mobile-secrets
 /// - Generates a unique AES-256 encryption key for this repository
 /// - Stores the key in `~/.mobile-secrets/a8c-secrets-encryption-keys.yaml`
-/// - Provides setup instructions for CI/CD environments
+/// - Provides setup instructions for CI environments
 ///
 /// For existing setup:
 /// - Validates the configuration file structure
@@ -131,6 +131,7 @@ files: []
     println!("   export {ENV_VAR_KEY}=\"{key_b64}\"");
     println!();
     println!("2. Commit and push the changes to `~/.mobile-secrets`'s `trunk` branch directly.");
+    println!("   (Both the manual changes you made to the `env` file and the change the setup script made of the `{MOBILE_SECRETS_ENCRYPTION_KEYS_FILE}` file)");
     println!(
         "3. Edit {} to specify which secret files you want to sync for your repository.",
         config_path.display()
@@ -325,6 +326,10 @@ pub fn encrypt_command() -> Result<()> {
         println!("Encrypted {} -> {}", file_config.source, encrypted_path);
     }
 
+    println!("✅ Encryption of secrets files from `~/.mobile-secrets` into `.enc` files in your repository is complete!");
+    println!("✅ You can now commit and push the changes to the `.enc` files in your repository,");
+    println!("   and run `a8c-secrets decrypt` to decrypt them to their configured local destination.");
+
     Ok(())
 }
 
@@ -435,6 +440,8 @@ pub fn decrypt_command() -> Result<()> {
             encrypted_path, file_config.destination
         );
     }
+
+    println!("✅ Decryption of `.enc` secrets files to their configured destinations is complete!");
 
     Ok(())
 }
