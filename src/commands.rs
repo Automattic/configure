@@ -4,11 +4,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-use crate::utils::{
-    check_mobile_secrets_up_to_date, decrypt_data, encrypt_data, generate_encryption_key,
-    get_current_repo_name, get_encryption_key_for_current_repo, get_mobile_secrets_head_sha1,
-    get_mobile_secrets_path, load_config, ensure_destination_is_git_ignored,
+use crate::crypto::{
+    decrypt_data, encrypt_data, generate_encryption_key, get_encryption_key_for_current_repo,
 };
+use crate::git::{
+    check_mobile_secrets_up_to_date, ensure_destination_is_git_ignored, get_current_repo_name,
+    get_mobile_secrets_head_sha1,
+};
+use crate::paths::{get_mobile_secrets_path, load_config};
 use crate::{
     Config, ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, REPO_SECRETS_CONFIG_FILE,
     REPO_SECRETS_DIR,
