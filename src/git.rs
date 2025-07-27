@@ -65,7 +65,7 @@ pub fn check_mobile_secrets_up_to_date(mobile_secrets_path: &Path) -> Result<()>
     let commits_behind = repo.graph_ahead_behind(head_commit.id(), trunk_commit.id())?.1;
     
     if commits_behind > 0 {
-        println!("⚠️  Warning: Your ~/.mobile-secrets repository is {} commit(s) behind origin/trunk.", commits_behind);
+        println!("⚠️  Warning: Your ~/.mobile-secrets repository is {commits_behind} commit(s) behind origin/trunk.");
         println!("   This means you might be encrypting outdated secrets.");
         println!();
         println!("   To update to the latest version, run:");
@@ -81,15 +81,13 @@ pub fn check_mobile_secrets_up_to_date(mobile_secrets_path: &Path) -> Result<()>
             if input == "y" || input == "yes" {
                 println!("   Continuing with current version...");
                 return Ok(());
-            } else {
-                return Err(anyhow!(
-                    "Update cancelled. Please update ~/.mobile-secrets first:\n\
-                    cd ~/.mobile-secrets && git checkout trunk && git pull"
-                ));
             }
-        } else {
-            return Err(anyhow!("Failed to read user input. Please update ~/.mobile-secrets first."));
+            return Err(anyhow!(
+                "Update cancelled. Please update ~/.mobile-secrets first:\n\
+                cd ~/.mobile-secrets && git checkout trunk && git pull"
+            ));
         }
+        return Err(anyhow!("Failed to read user input. Please update ~/.mobile-secrets first."));
     }
 
     Ok(())

@@ -10,9 +10,9 @@ mod paths;
 use commands::{decrypt_command, encrypt_command, setup_command};
 
 // Constants for file names
+pub const REPO_SECRETS_DIR: &str = ".a8c-secrets";
 pub const REPO_SECRETS_CONFIG_FILE: &str = "config.yaml";
 pub const MOBILE_SECRETS_ENCRYPTION_KEYS_FILE: &str = "a8c-secrets-encryption-keys.yaml";
-pub const REPO_SECRETS_DIR: &str = ".a8c-secrets";
 pub const ENV_VAR_KEY: &str = "A8C_SECRETS_ENCRYPTION_KEY";
 
 #[derive(Parser)]
