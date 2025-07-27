@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 mod commands;
 mod utils;
 
-use commands::{apply_command, setup_command, update_command};
+use commands::{decrypt_command, encrypt_command, setup_command};
 
 // Constants for file names
 pub const REPO_SECRETS_CONFIG_FILE: &str = "config.yaml";
@@ -24,8 +24,8 @@ a8c-secrets - Automattic Secrets Management Tool
 This tool manages encrypted secret files in your repository. It provides a secure workflow for:
 
 • Setting up or validating the initial a8c-secrets configuration in your repository (`setup`)
-• Encrypting new secrets, or updating existing ones, from `~/.mobile-secrets` into your repository (`update`)
-• Decrypting secrets from `.a8c-secrets/*.enc` files for you to use in local development or CI (`apply`)
+• Encrypting new secrets, or updating existing ones, from `~/.mobile-secrets` into your repository (`encrypt`)
+• Decrypting secrets from `.a8c-secrets/*.enc` files for you to use in local development or CI (`decrypt`)
 
 The tool uses AES-256-GCM encryption with unique keys per repository, stored in `~/.mobile-secrets/a8c-secrets-encryption-keys.yaml`.
 Each project maintains a `.a8c-secrets/config.yaml` configuration file that tracks which secrets to sync and where to place them when decrypted.
@@ -76,7 +76,7 @@ Run this command whenever you want to encrypt new secrets or update the encrypte
 repository with the latest versions from `~/.mobile-secrets`.
 "#
     )]
-    Update,
+    Encrypt,
 
     #[command(about = "Decrypt secrets from `.a8c-secrets/*.enc` files to their destinations")]
     #[command(
@@ -95,7 +95,7 @@ The decryption key is obtained from:
 Use this command in local development or CI to make the secret files decrypted and available in the right places before compilation.
 "#
     )]
-    Apply,
+    Decrypt,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -122,7 +122,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Setup => setup_command(),
-        Commands::Update => update_command(),
-        Commands::Apply => apply_command(),
+        Commands::Encrypt => encrypt_command(),
+        Commands::Decrypt => decrypt_command(),
     }
 }
