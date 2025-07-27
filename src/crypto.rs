@@ -3,12 +3,10 @@ use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
 use std::fs;
 
-use crate::{
-    ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE,
-};
+use crate::{ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE};
 
-use crate::paths::get_mobile_secrets_path;
 use crate::git::get_current_repo_name;
+use crate::paths::get_mobile_secrets_path;
 
 /// Retrieves the encryption key for the current repository.
 ///
