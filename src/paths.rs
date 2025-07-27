@@ -9,7 +9,13 @@ use crate::{Config, REPO_SECRETS_CONFIG_FILE, REPO_SECRETS_DIR};
 /// - `Ok(PathBuf)` containing the path to ~/.mobile-secrets
 /// - `Err(anyhow::Error)` if the HOME environment variable is not set
 pub fn get_mobile_secrets_path() -> Result<PathBuf> {
-    let home = std::env::var("HOME").map_err(|_| anyhow!("HOME environment variable not set"))?;
+    let home = std::env::var("HOME").map_err(|_| {
+        anyhow!(
+            "HOME environment variable not set.\n\n\
+            This is required to locate the ~/.mobile-secrets directory.\n\
+            Make sure you're running this command in a proper shell environment."
+        )
+    })?;
     Ok(PathBuf::from(home).join(".mobile-secrets"))
 }
 

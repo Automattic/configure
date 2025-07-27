@@ -158,7 +158,11 @@ pub fn decrypt_data(encrypted_data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce};
 
     if encrypted_data.len() < MIN_ENCRYPTED_DATA_SIZE {
-      return Err(anyhow!("Invalid encrypted data: too short"));
+        return Err(anyhow!(
+            "Invalid encrypted data: too short (expected at least {} bytes, got {})",
+            MIN_ENCRYPTED_DATA_SIZE,
+            encrypted_data.len()
+        ));
     }
 
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));

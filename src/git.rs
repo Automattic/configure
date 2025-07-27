@@ -48,14 +48,25 @@ pub fn get_mobile_secrets_head_sha1(mobile_secrets_path: &Path) -> Result<String
 pub fn get_current_repo_name() -> Result<String> {
     let repo = git2::Repository::open(".")?;
     let remote = repo.find_remote("origin")?;
-    let remote_url = remote.url().ok_or_else(|| anyhow!("No remote URL found"))?;
+    let remote_url = remote.url().ok_or_else(|| {
+        anyhow!(
+            "No remote URL found for origin remote.\n\n\
+            Make sure your repository has an origin remote configured:\n\
+            git remote add origin <repository-url>"
+        )
+    })?;
 
     // Extract repository name from URL (handles both SSH and HTTPS URLs, removing .git suffix)
     let url = remote_url.trim_end_matches(".git");
-    let name = url
-        .split('/')
-        .next_back()
-        .ok_or_else(|| anyhow!("Could not extract repo name from URL"))?;
+    let name = url.split('/').next_back().ok_or_else(|| {
+        anyhow!(
+            "Could not extract repository name from URL: {}\n\n\
+                The URL should be in the format:\n\
+                - git@github.com:user/repo-name.git\n\
+                - https://github.com/user/repo-name.git",
+            remote_url
+        )
+    })?;
     Ok(name.to_owned())
 }
 
