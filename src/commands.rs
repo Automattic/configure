@@ -7,7 +7,7 @@ use std::path::Path;
 use crate::utils::{
     decrypt_data, encrypt_data, generate_encryption_key, get_current_repo_name,
     get_encryption_key_for_current_repo, get_mobile_secrets_head_sha1, get_mobile_secrets_path,
-    is_ignored_by_git, load_config,
+    load_config, ensure_destination_is_git_ignored,
 };
 use crate::{
     Config, ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, REPO_SECRETS_CONFIG_FILE,
@@ -284,43 +284,7 @@ pub fn update_command() -> Result<()> {
         }
 
         // Check if the destination file would be ignored by git
-        match is_ignored_by_git(&file_config.destination) {
-            Ok(false) => {
-                return Err(anyhow!(
-                    "⚠️  SECURITY WARNING: Destination file '{}' is NOT ignored by git!\n\n\
-                    This means the decrypted secret file could be accidentally committed to your repository,\n\
-                    which would expose your secrets in version control.\n\n\
-                    To fix this issue:\n\
-                    1. Add '{}' to your .gitignore file, OR\n\
-                    2. Change the destination path to a location outside your repository, OR\n\
-                    3. Change the destination path to a location that's already git-ignored\n\n\
-                    Example .gitignore entries:\n\
-                    # Ignore this specific file\n\
-                    {}\n\
-                    # Or ignore all secret files in a directory\n\
-                    secrets/\n\
-                    *.secret\n\n\
-                    After updating .gitignore, run 'git check-ignore {}' to verify it's ignored.",
-                    file_config.destination,
-                    file_config.destination,
-                    file_config.destination,
-                    file_config.destination
-                ));
-            }
-            Ok(true) => {
-                // File is properly ignored, continue
-            }
-            Err(e) => {
-                // Git check failed, but we'll warn and continue (not everyone uses git)
-                eprintln!(
-                    "⚠️  Warning: Could not check if '{}' is ignored by git: {}",
-                    file_config.destination, e
-                );
-                eprintln!(
-                    "   Make sure your secret files are properly ignored by version control."
-                );
-            }
-        }
+        ensure_destination_is_git_ignored(&file_config.destination)?;
 
         let content = fs::read(&source_path).map_err(|e| {
             anyhow!(
@@ -388,6 +352,9 @@ pub fn apply_command() -> Result<()> {
     }
 
     for file_config in &config.files {
+        // Check if the destination file would be ignored by git (early validation)
+        ensure_destination_is_git_ignored(&file_config.destination)?;
+
         let source_filename = Path::new(&file_config.source)
             .file_name()
             .ok_or_else(|| {
