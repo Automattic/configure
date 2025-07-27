@@ -8,6 +8,15 @@ use crate::{ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE};
 use crate::git::get_current_repo_name;
 use crate::paths::get_mobile_secrets_path;
 
+/// AES-256-GCM nonce size in bytes
+pub const AES_GCM_NONCE_SIZE: usize = 12;
+
+/// AES-256 key size in bytes
+pub const AES_256_KEY_SIZE: usize = 32;
+
+/// Minimum size for encrypted data (nonce + at least 1 byte of ciphertext)
+pub const MIN_ENCRYPTED_DATA_SIZE: usize = AES_GCM_NONCE_SIZE + 1;
+
 /// Retrieves the encryption key for the current repository.
 ///
 /// Attempts to get the key from:
@@ -95,9 +104,9 @@ pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
 ///
 /// # Returns
 /// A 32-byte array containing random bytes suitable for AES-256 encryption
-pub fn generate_encryption_key() -> [u8; 32] {
+pub fn generate_encryption_key() -> [u8; AES_256_KEY_SIZE] {
     use rand::RngCore;
-    let mut key = [0u8; 32];
+    let mut key = [0u8; AES_256_KEY_SIZE];
     rand::thread_rng().fill_bytes(&mut key);
     key
 }
@@ -120,7 +129,7 @@ pub fn encrypt_data(data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
 
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
 
-    let mut nonce_bytes = [0u8; 12];
+    let mut nonce_bytes = [0u8; AES_GCM_NONCE_SIZE];
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -148,13 +157,13 @@ pub fn decrypt_data(encrypted_data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     use aes_gcm::aead::Aead;
     use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce};
 
-    if encrypted_data.len() < 12 {
-        return Err(anyhow!("Invalid encrypted data: too short"));
+    if encrypted_data.len() < MIN_ENCRYPTED_DATA_SIZE {
+      return Err(anyhow!("Invalid encrypted data: too short"));
     }
 
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
-    let nonce = Nonce::from_slice(&encrypted_data[0..12]);
-    let ciphertext = &encrypted_data[12..];
+    let nonce = Nonce::from_slice(&encrypted_data[0..AES_GCM_NONCE_SIZE]);
+    let ciphertext = &encrypted_data[AES_GCM_NONCE_SIZE..];
 
     let plaintext = cipher
         .decrypt(nonce, ciphertext)
