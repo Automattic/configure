@@ -3,6 +3,45 @@ use std::path::{Path, PathBuf};
 
 use crate::{Config, REPO_SECRETS_CONFIG_FILE, REPO_SECRETS_DIR};
 
+/// Expands a path that may contain a tilde (~) to the user's home directory.
+///
+/// # Arguments
+/// - `path` - The path that may contain a tilde
+///
+/// # Returns
+/// - `PathBuf` with the tilde expanded to the user's home directory if present
+/// - The original path unchanged if no tilde is present
+fn expand_tilde_path(path: &str) -> Result<PathBuf> {
+    let path_buf = PathBuf::from(path);
+    let mut components = path_buf.components();
+
+    if let Some(first_component) = components.next() {
+        if first_component == std::path::Component::Normal(std::ffi::OsStr::new("~")) {
+            let home = std::env::var("HOME").map_err(|_| {
+                anyhow!(
+                    "HOME environment variable not set.\n\n\
+                    This is required to expand tilde (~) in path '{}'.\n\
+                    Make sure you're running this command in a proper shell environment.",
+                    path
+                )
+            })?;
+
+            let home_path = PathBuf::from(home);
+            let remaining_components: Vec<_> = components.collect();
+
+            if remaining_components.is_empty() {
+                Ok(home_path)
+            } else {
+                Ok(home_path.join(remaining_components.into_iter().collect::<PathBuf>()))
+            }
+        } else {
+            Ok(path_buf)
+        }
+    } else {
+        Ok(path_buf)
+    }
+}
+
 /// Validates a source path relative to ~/.mobile-secrets.
 ///
 /// # Arguments
@@ -109,6 +148,28 @@ pub fn load_config() -> Result<Config> {
             e
         )
     })?;
+
+    // Expand tilde paths in destination fields using functional approach
+    let config = Config {
+        files: config
+            .files
+            .into_iter()
+            .map(|mut file_entry| {
+                let expanded_path = expand_tilde_path(&file_entry.destination)?;
+                file_entry.destination = expanded_path
+                    .to_str()
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Destination path '{}' contains invalid UTF-8 characters",
+                            file_entry.destination
+                        )
+                    })?
+                    .to_string();
+                Ok(file_entry)
+            })
+            .collect::<Result<Vec<_>>>()?,
+        ..config
+    };
 
     Ok(config)
 }
@@ -410,6 +471,93 @@ files:
                     continue;
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_load_config_with_tilde_destination() {
+        let temp_dir = tempdir().unwrap();
+
+        // Create .a8c-secrets directory
+        let config_dir = temp_dir.path().join(".a8c-secrets");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        // Test with tilde in destination path
+        let config_with_tilde = r#"sha1: "abc123def456"
+files:
+  - source: "secrets/api_key.txt"
+    destination: "~/.my-app/secrets.swift"
+"#;
+        let config_path = config_dir.join("config.yaml");
+        fs::write(&config_path, config_with_tilde).unwrap();
+
+        with_temp_dir(temp_dir.path(), || {
+            let result = load_config();
+            let config = result.unwrap();
+            assert_eq!(config.files.len(), 1);
+            assert_eq!(config.files[0].source, "secrets/api_key.txt");
+            // The tilde should be expanded during load_config
+            assert!(!config.files[0].destination.starts_with('~'));
+            assert!(config.files[0].destination.contains(".my-app"));
+        });
+    }
+
+    #[test]
+    fn test_expand_tilde_path() {
+        // Save original HOME value
+        let original_home = std::env::var("HOME").ok();
+
+        // Test with HOME set
+        let temp_dir = tempdir().unwrap();
+        std::env::set_var("HOME", temp_dir.path());
+
+        // Test tilde expansion
+        let result = expand_tilde_path("~/.my-app/secrets.swift").unwrap();
+        assert_eq!(
+            result,
+            temp_dir.path().join(".my-app").join("secrets.swift")
+        );
+
+        // Test just tilde
+        let result = expand_tilde_path("~").unwrap();
+        assert_eq!(result, temp_dir.path());
+
+        // Test path without tilde
+        let result = expand_tilde_path("config/secrets.env").unwrap();
+        assert_eq!(result, std::path::PathBuf::from("config/secrets.env"));
+
+        // Test absolute path without tilde
+        let result = expand_tilde_path("/absolute/path").unwrap();
+        assert_eq!(result, std::path::PathBuf::from("/absolute/path"));
+
+        // Restore original HOME value
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+    }
+
+    #[test]
+    fn test_expand_tilde_path_no_home() {
+        // Save original HOME value
+        let original_home = std::env::var("HOME").ok();
+
+        // Test without HOME set
+        std::env::remove_var("HOME");
+
+        let result = expand_tilde_path("~/.my-app/secrets.swift");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("HOME environment variable not set"));
+
+        // Restore original HOME value
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
         }
     }
 }
