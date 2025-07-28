@@ -55,13 +55,16 @@ pub fn get_mobile_secrets_head_sha1(mobile_secrets_path: &Path) -> Result<String
     Ok(commit.id().to_string())
 }
 
-/// Extracts the repository name from the current directory's git remote origin URL.
+/// Extracts the repository name from the specified directory's git remote origin URL.
+///
+/// # Arguments
+/// - `repo_path` - Path to the git repository directory
 ///
 /// # Returns
 /// - `Ok(String)` containing the repository name (e.g., "my-repo" from "git@github.com:user/my-repo.git")
 /// - `Err(anyhow::Error)` if git repository can't be opened, origin remote doesn't exist, or URL is invalid
-pub fn get_current_repo_name() -> Result<String> {
-    let repo = git2::Repository::open(".")?;
+pub fn get_repo_name(repo_path: &Path) -> Result<String> {
+    let repo = git2::Repository::open(repo_path)?;
     let remote = repo.find_remote("origin")?;
     let remote_url = remote.url().ok_or_else(|| {
         anyhow!(
@@ -169,8 +172,8 @@ pub fn check_mobile_secrets_up_to_date(mobile_secrets_path: &Path) -> Result<()>
 /// # Returns
 /// - `Ok(())` if the file is properly ignored
 /// - `Err(anyhow::Error)` if the file is not ignored or validation fails
-pub fn ensure_destination_is_git_ignored(destination_path: &str) -> Result<()> {
-    let repo = git2::Repository::open(".").map_err(|e| {
+pub fn ensure_destination_is_git_ignored(destination_path: &str, repo_path: &Path) -> Result<()> {
+    let repo = git2::Repository::open(repo_path).map_err(|e| {
         anyhow!(
             "Failed to open git repository: {}\n\n\
             Make sure you're running this command from within a git repository.",
@@ -243,7 +246,7 @@ mod tests {
 
         // Create a tree with the file
         let mut tree_builder = repo.treebuilder(None).unwrap();
-        tree_builder.insert(file_name, blob_id, 0o100644).unwrap();
+        tree_builder.insert(file_name, blob_id, 0o100_644).unwrap();
         let tree_id = tree_builder.write().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
 
@@ -342,100 +345,69 @@ mod tests {
         (working_dir, bare_repo_dir)
     }
 
-    /// Helper function to run a test with a temporary directory and restore the original directory.
-    ///
-    /// # Arguments
-    /// - `temp_path` - Path to the temporary directory to change to
-    /// - `test_fn` - Function to run in the temporary directory
-    fn with_temp_dir<F>(temp_path: &Path, test_fn: F)
-    where
-        F: FnOnce(),
-    {
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        test_fn();
-
-        std::env::set_current_dir(original_dir).unwrap();
-    }
-
     #[test]
-    fn test_get_current_repo_name_https_with_git_suffix() {
+    fn test_get_repo_name_https_with_git_suffix() {
         let (temp_dir, _repo) =
             create_test_repo(Some("https://github.com/automattic/test-repo.git"));
 
-        with_temp_dir(temp_dir.path(), || {
-            let repo_name = get_current_repo_name().unwrap();
-            assert_eq!(repo_name, "test-repo");
-        });
+        let repo_name = get_repo_name(temp_dir.path()).unwrap();
+        assert_eq!(repo_name, "test-repo");
     }
 
     #[test]
-    fn test_get_current_repo_name_https_without_git_suffix() {
+    fn test_get_repo_name_https_without_git_suffix() {
         let (temp_dir, _repo) = create_test_repo(Some("https://github.com/automattic/test-repo"));
 
-        with_temp_dir(temp_dir.path(), || {
-            let repo_name = get_current_repo_name().unwrap();
-            assert_eq!(repo_name, "test-repo");
-        });
+        let repo_name = get_repo_name(temp_dir.path()).unwrap();
+        assert_eq!(repo_name, "test-repo");
     }
 
     #[test]
-    fn test_get_current_repo_name_ssh_with_git_suffix() {
+    fn test_get_repo_name_ssh_with_git_suffix() {
         let (temp_dir, _repo) = create_test_repo(Some("git@github.com:automattic/test-repo.git"));
 
-        with_temp_dir(temp_dir.path(), || {
-            let repo_name = get_current_repo_name().unwrap();
-            assert_eq!(repo_name, "test-repo");
-        });
+        let repo_name = get_repo_name(temp_dir.path()).unwrap();
+        assert_eq!(repo_name, "test-repo");
     }
 
     #[test]
-    fn test_get_current_repo_name_ssh_without_git_suffix() {
+    fn test_get_repo_name_ssh_without_git_suffix() {
         let (temp_dir, _repo) = create_test_repo(Some("git@github.com:automattic/test-repo"));
 
-        with_temp_dir(temp_dir.path(), || {
-            let repo_name = get_current_repo_name().unwrap();
-            assert_eq!(repo_name, "test-repo");
-        });
+        let repo_name = get_repo_name(temp_dir.path()).unwrap();
+        assert_eq!(repo_name, "test-repo");
     }
 
     #[test]
-    fn test_get_current_repo_name_with_subdomain() {
+    fn test_get_repo_name_with_subdomain() {
         let (temp_dir, _repo) =
             create_test_repo(Some("https://git.example.com/org/my-project.git"));
 
-        with_temp_dir(temp_dir.path(), || {
-            let repo_name = get_current_repo_name().unwrap();
-            assert_eq!(repo_name, "my-project");
-        });
+        let repo_name = get_repo_name(temp_dir.path()).unwrap();
+        assert_eq!(repo_name, "my-project");
     }
 
     #[test]
-    fn test_get_current_repo_name_no_remote() {
+    fn test_get_repo_name_no_remote() {
         let (temp_dir, _repo) = create_test_repo(None);
 
-        with_temp_dir(temp_dir.path(), || {
-            let result = get_current_repo_name();
-            assert!(result.is_err());
-            let error_msg = result.unwrap_err().to_string();
-            // Accept any error about missing remote
-            assert!(
-                error_msg.contains("remote")
-                    || error_msg.contains("origin")
-                    || error_msg.contains("find_remote")
-            );
-        });
+        let result = get_repo_name(temp_dir.path());
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // Accept any error about missing remote
+        assert!(
+            error_msg.contains("remote")
+                || error_msg.contains("origin")
+                || error_msg.contains("find_remote")
+        );
     }
 
     #[test]
-    fn test_get_current_repo_name_not_git_repo() {
+    fn test_get_repo_name_not_git_repo() {
         let temp_dir = tempdir().unwrap();
-        // Change to a non-git directory
-        with_temp_dir(temp_dir.path(), || {
-            let result = get_current_repo_name();
-            assert!(result.is_err());
-        });
+        // Test with a non-git directory
+        let result = get_repo_name(temp_dir.path());
+        assert!(result.is_err());
     }
 
     #[test]
