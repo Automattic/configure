@@ -6,14 +6,26 @@ const SKIP_PROMPT_ENV_VAR: &str = "A8C_SECRETS_SKIP_PROMPT_IF_MOBILE_SECRETS_BEH
 
 /// Validates that the repository is not in a detached HEAD state.
 ///
+/// This function checks if the HEAD reference is a symbolic reference (pointing to a branch)
+/// rather than a direct reference (pointing to a specific commit).
+///
 /// # Arguments
-/// - `head` - The HEAD reference from the repository
+/// - `head` - The HEAD reference to validate
 ///
 /// # Returns
-/// - `Ok(())` if the repository is on a proper branch
-/// - `Err(anyhow::Error)` if the repository is in detached HEAD state
+/// - `Ok(())` if HEAD is not detached
+/// - `Err(anyhow::Error)` if HEAD is detached
 fn validate_not_detached_head(head: &git2::Reference) -> Result<()> {
     if head.kind() == Some(git2::ReferenceType::Direct) {
+        // Check if HEAD is pointing to a branch reference (e.g., refs/heads/trunk)
+        // This can happen with git2 even when properly checked out
+        if let Some(name) = head.name() {
+            if name.starts_with("refs/heads/") {
+                // This is actually a branch reference, not truly detached
+                return Ok(());
+            }
+        }
+
         return Err(anyhow!(
             "The ~/.mobile-secrets repository is in a detached HEAD state.\n\n\
             This usually happens when you've checked out a specific commit instead of a branch.\n\n\
@@ -200,5 +212,335 @@ pub fn ensure_destination_is_git_ignored(destination_path: &str) -> Result<()> {
             destination_path,
             destination_path
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    /// Helper function to create a commit with a dummy file in a repository.
+    ///
+    /// # Arguments
+    /// - `repo` - The git repository to create the commit in
+    /// - `file_name` - The name of the dummy file to create
+    /// - `file_content` - The content of the dummy file
+    /// - `commit_message` - The commit message
+    /// - `parents` - Optional parent commits (empty slice for initial commit)
+    ///
+    /// # Returns
+    /// - `git2::Oid` - The commit ID
+    fn create_commit_with_file(
+        repo: &git2::Repository,
+        file_name: &str,
+        file_content: &[u8],
+        commit_message: &str,
+        parents: &[&git2::Commit],
+    ) -> git2::Oid {
+        // Create the file content as a blob
+        let blob_id = repo.blob(file_content).unwrap();
+
+        // Create a tree with the file
+        let mut tree_builder = repo.treebuilder(None).unwrap();
+        tree_builder.insert(file_name, blob_id, 0o100644).unwrap();
+        let tree_id = tree_builder.write().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+
+        // Create the commit
+        let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
+        let commit_id = repo
+            .commit(
+                Some("refs/heads/trunk"),
+                &signature,
+                &signature,
+                commit_message,
+                &tree,
+                parents,
+            )
+            .unwrap();
+
+        // Drop borrowed objects
+        drop(tree);
+        drop(signature);
+
+        commit_id
+    }
+
+    /// Helper function to create a git repository with an initial commit and optional remote.
+    ///
+    /// # Arguments
+    /// - `remote_url` - Optional remote URL. If None, no remote is added.
+    ///
+    /// # Returns
+    /// - `(tempfile::TempDir, git2::Repository)` - The temp directory and repository
+    fn create_test_repo(remote_url: Option<&str>) -> (tempfile::TempDir, git2::Repository) {
+        let temp_dir = tempdir().unwrap();
+        let temp_path = temp_dir.path();
+
+        let repo = git2::Repository::init(temp_path).unwrap();
+
+        // Create initial commit with a dummy file
+        create_commit_with_file(&repo, "test.txt", b"test content", "Initial commit", &[]);
+        repo.set_head("refs/heads/trunk").unwrap();
+
+        // Add remote if provided
+        if let Some(url) = remote_url {
+            repo.remote("origin", url).unwrap();
+        }
+
+        (temp_dir, repo)
+    }
+
+    /// Helper function to create a test repository with a bare repository as its remote.
+    ///
+    /// # Returns
+    /// - `(tempfile::TempDir, tempfile::TempDir)` - The working copy directory and bare repo directory
+    fn create_test_repo_with_bare_remote() -> (tempfile::TempDir, tempfile::TempDir) {
+        // Create a bare repository to serve as the remote
+        let bare_repo_dir = tempdir().unwrap();
+        let bare_repo = git2::Repository::init_bare(bare_repo_dir.path()).unwrap();
+
+        // Create initial commit in the bare repo on trunk branch
+        create_commit_with_file(
+            &bare_repo,
+            "initial.txt",
+            b"initial content",
+            "Initial commit",
+            &[],
+        );
+
+        // Create the working copy (mobile-secrets repo)
+        let working_dir = tempdir().unwrap();
+        let working_repo = git2::Repository::init(working_dir.path()).unwrap();
+
+        // Add the bare repo as remote
+        working_repo
+            .remote("origin", bare_repo_dir.path().to_str().unwrap())
+            .unwrap();
+
+        // Fetch from remote to get the trunk branch
+        let mut remote = working_repo.find_remote("origin").unwrap();
+        remote.fetch(&["trunk"], None, None).unwrap();
+
+        // Use git2 to checkout the trunk branch
+        let trunk_oid = working_repo
+            .refname_to_id("refs/remotes/origin/trunk")
+            .unwrap();
+        let trunk_commit = working_repo.find_commit(trunk_oid).unwrap();
+
+        // Create a local trunk branch pointing to the remote trunk
+        working_repo.branch("trunk", &trunk_commit, false).unwrap();
+
+        // Set HEAD to the trunk branch
+        working_repo.set_head("refs/heads/trunk").unwrap();
+
+        // Drop borrowed objects
+        drop(remote);
+        drop(trunk_commit);
+
+        (working_dir, bare_repo_dir)
+    }
+
+    /// Helper function to run a test with a temporary directory and restore the original directory.
+    ///
+    /// # Arguments
+    /// - `temp_path` - Path to the temporary directory to change to
+    /// - `test_fn` - Function to run in the temporary directory
+    fn with_temp_dir<F>(temp_path: &Path, test_fn: F)
+    where
+        F: FnOnce(),
+    {
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        test_fn();
+
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_get_current_repo_name_https_with_git_suffix() {
+        let (temp_dir, _repo) =
+            create_test_repo(Some("https://github.com/automattic/test-repo.git"));
+
+        with_temp_dir(temp_dir.path(), || {
+            let repo_name = get_current_repo_name().unwrap();
+            assert_eq!(repo_name, "test-repo");
+        });
+    }
+
+    #[test]
+    fn test_get_current_repo_name_https_without_git_suffix() {
+        let (temp_dir, _repo) = create_test_repo(Some("https://github.com/automattic/test-repo"));
+
+        with_temp_dir(temp_dir.path(), || {
+            let repo_name = get_current_repo_name().unwrap();
+            assert_eq!(repo_name, "test-repo");
+        });
+    }
+
+    #[test]
+    fn test_get_current_repo_name_ssh_with_git_suffix() {
+        let (temp_dir, _repo) = create_test_repo(Some("git@github.com:automattic/test-repo.git"));
+
+        with_temp_dir(temp_dir.path(), || {
+            let repo_name = get_current_repo_name().unwrap();
+            assert_eq!(repo_name, "test-repo");
+        });
+    }
+
+    #[test]
+    fn test_get_current_repo_name_ssh_without_git_suffix() {
+        let (temp_dir, _repo) = create_test_repo(Some("git@github.com:automattic/test-repo"));
+
+        with_temp_dir(temp_dir.path(), || {
+            let repo_name = get_current_repo_name().unwrap();
+            assert_eq!(repo_name, "test-repo");
+        });
+    }
+
+    #[test]
+    fn test_get_current_repo_name_with_subdomain() {
+        let (temp_dir, _repo) =
+            create_test_repo(Some("https://git.example.com/org/my-project.git"));
+
+        with_temp_dir(temp_dir.path(), || {
+            let repo_name = get_current_repo_name().unwrap();
+            assert_eq!(repo_name, "my-project");
+        });
+    }
+
+    #[test]
+    fn test_get_current_repo_name_no_remote() {
+        let (temp_dir, _repo) = create_test_repo(None);
+
+        with_temp_dir(temp_dir.path(), || {
+            let result = get_current_repo_name();
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err().to_string();
+            // Accept any error about missing remote
+            assert!(
+                error_msg.contains("remote")
+                    || error_msg.contains("origin")
+                    || error_msg.contains("find_remote")
+            );
+        });
+    }
+
+    #[test]
+    fn test_get_current_repo_name_not_git_repo() {
+        let temp_dir = tempdir().unwrap();
+        // Change to a non-git directory
+        with_temp_dir(temp_dir.path(), || {
+            let result = get_current_repo_name();
+            assert!(result.is_err());
+        });
+    }
+
+    #[test]
+    fn test_get_mobile_secrets_head_sha1_success() {
+        let (temp_dir, repo) = create_test_repo(None);
+
+        // Get the commit ID from the repository
+        let head = repo.head().unwrap();
+        let commit_id = head.peel_to_commit().unwrap().id();
+
+        // The function should work and return the correct SHA1
+        let sha1 = get_mobile_secrets_head_sha1(temp_dir.path()).unwrap();
+        assert_eq!(sha1, commit_id.to_string());
+    }
+
+    #[test]
+    fn test_get_mobile_secrets_head_sha1_detached_head() {
+        let (temp_dir, repo) = create_test_repo(None);
+
+        // Set HEAD to detached state
+        let head = repo.head().unwrap();
+        let commit_id = head.peel_to_commit().unwrap().id();
+        repo.set_head_detached(commit_id).unwrap();
+
+        let result = get_mobile_secrets_head_sha1(temp_dir.path());
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("detached HEAD") || error_msg.contains("detached HEAD state"));
+    }
+
+    #[test]
+    fn test_get_mobile_secrets_head_sha1_not_git_repo() {
+        let temp_dir = tempdir().unwrap();
+        let result = get_mobile_secrets_head_sha1(temp_dir.path());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_check_mobile_secrets_up_to_date_success() {
+        let (working_dir, _bare_repo_dir) = create_test_repo_with_bare_remote();
+
+        // The function should succeed because we're up-to-date with remote trunk
+        let result = check_mobile_secrets_up_to_date(working_dir.path());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_mobile_secrets_up_to_date_behind_remote() {
+        let (working_dir, bare_repo_dir) = create_test_repo_with_bare_remote();
+
+        // Now add a new commit to the bare repo (simulating remote update)
+        let bare_repo = git2::Repository::open_bare(bare_repo_dir.path()).unwrap();
+
+        // Get the initial commit as parent
+        let trunk_ref = bare_repo.find_reference("refs/heads/trunk").unwrap();
+        let initial_commit = trunk_ref.peel_to_commit().unwrap();
+
+        // Create a new commit with a new file
+        create_commit_with_file(
+            &bare_repo,
+            "new_file.txt",
+            b"new content",
+            "New commit",
+            &[&initial_commit],
+        );
+
+        // Test case 1: User chooses to continue (should succeed)
+        std::env::set_var(SKIP_PROMPT_ENV_VAR, "yes"); // Skip prompt and return yes
+        let result = check_mobile_secrets_up_to_date(working_dir.path());
+        assert!(result.is_ok());
+
+        // Test case 2: User chooses not to continue (should fail)
+        std::env::set_var(SKIP_PROMPT_ENV_VAR, "no"); // Skip prompt and return no
+        let result = check_mobile_secrets_up_to_date(working_dir.path());
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // Should contain information about being cancelled
+        assert!(error_msg.contains("cancelled") || error_msg.contains("update"));
+    }
+
+    #[test]
+    fn test_check_mobile_secrets_up_to_date_detached_head() {
+        let (working_dir, _bare_repo_dir) = create_test_repo_with_bare_remote();
+
+        // Open the working copy repository and set it to detached HEAD state
+        let repo = git2::Repository::open(working_dir.path()).unwrap();
+        let head = repo.head().unwrap();
+        let commit_id = head.peel_to_commit().unwrap().id();
+        repo.set_head_detached(commit_id).unwrap();
+
+        let result = check_mobile_secrets_up_to_date(working_dir.path());
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // Accept any error about detached HEAD
+        assert!(
+            error_msg.contains("detached HEAD")
+                || error_msg.contains("detached HEAD state")
+                || error_msg.contains("HEAD state")
+        );
+    }
+
+    #[test]
+    fn test_check_mobile_secrets_up_to_date_not_git_repo() {
+        let temp_dir = tempdir().unwrap();
+        let result = check_mobile_secrets_up_to_date(temp_dir.path());
+        assert!(result.is_err());
     }
 }

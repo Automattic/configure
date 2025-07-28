@@ -176,3 +176,168 @@ pub fn decrypt_data(encrypted_data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
 
     Ok(plaintext)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::RngCore;
+
+    #[test]
+    fn test_generate_encryption_key() {
+        let key1 = generate_encryption_key();
+        let key2 = generate_encryption_key();
+
+        // Keys should be different (random)
+        assert_ne!(key1, key2);
+
+        // Keys should be 32 bytes (AES-256)
+        assert_eq!(key1.len(), AES_256_KEY_SIZE);
+        assert_eq!(key2.len(), AES_256_KEY_SIZE);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_data() {
+        let key = generate_encryption_key();
+        let plaintext = b"Hello, World! This is a test message.";
+
+        // Encrypt
+        let encrypted = encrypt_data(plaintext, &key).unwrap();
+
+        // Verify encrypted data is different from plaintext
+        assert_ne!(encrypted, plaintext);
+
+        // Verify encrypted data is longer than plaintext (due to nonce + tag)
+        assert!(encrypted.len() > plaintext.len());
+
+        // Decrypt
+        let decrypted = decrypt_data(&encrypted, &key).unwrap();
+
+        // Verify decrypted data matches original
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_empty_data() {
+        let key = generate_encryption_key();
+        let plaintext = b"";
+
+        let encrypted = encrypt_data(plaintext, &key).unwrap();
+        let decrypted = decrypt_data(&encrypted, &key).unwrap();
+
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_encrypt_decrypt_large_data() {
+        let key = generate_encryption_key();
+        let plaintext: Vec<u8> = (0..10000).map(|i| (i % 256) as u8).collect();
+
+        let encrypted = encrypt_data(&plaintext, &key).unwrap();
+        let decrypted = decrypt_data(&encrypted, &key).unwrap();
+
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn test_decrypt_with_wrong_key() {
+        let key1 = generate_encryption_key();
+        let key2 = generate_encryption_key();
+        let plaintext = b"Test message";
+
+        let encrypted = encrypt_data(plaintext, &key1).unwrap();
+
+        // Should fail with wrong key
+        let result = decrypt_data(&encrypted, &key2);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_corrupted_data() {
+        let key = generate_encryption_key();
+        let plaintext = b"Test message";
+
+        let mut encrypted = encrypt_data(plaintext, &key).unwrap();
+
+        // Corrupt the data
+        if !encrypted.is_empty() {
+            encrypted[0] ^= 1;
+        }
+
+        let result = decrypt_data(&encrypted, &key);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decrypt_too_short_data() {
+        let key = generate_encryption_key();
+        let short_data = vec![0u8; MIN_ENCRYPTED_DATA_SIZE - 1];
+
+        let result = decrypt_data(&short_data, &key);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("too short"));
+    }
+
+    #[test]
+    fn test_decrypt_invalid_base64() {
+        let key = generate_encryption_key();
+        let invalid_base64 = b"not-valid-base64!@#";
+        let result = decrypt_data(invalid_base64, &key);
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // The function doesn't validate base64 first, so it fails with decryption error
+        assert!(error_msg.contains("Decryption failed") || error_msg.contains("aead::Error"));
+    }
+
+    #[test]
+    fn test_get_encryption_key_for_current_repo_with_env_var() {
+        // Generate a random 32-byte key and base64-encode it
+        let mut raw_key = [0u8; AES_256_KEY_SIZE];
+        rand::thread_rng().fill_bytes(&mut raw_key);
+        let test_key = base64::engine::general_purpose::STANDARD.encode(raw_key);
+
+        // Store original value to restore later
+        let original_value = std::env::var(ENV_VAR_KEY).ok();
+
+        // Set the environment variable
+        std::env::set_var(ENV_VAR_KEY, &test_key);
+
+        let result = get_encryption_key_for_current_repo();
+        assert!(result.is_ok());
+        let key = result.unwrap();
+        assert_eq!(key.len(), AES_256_KEY_SIZE);
+        assert_eq!(key, raw_key);
+
+        // Restore original environment state
+        match original_value {
+            Some(val) => std::env::set_var(ENV_VAR_KEY, val),
+            None => std::env::remove_var(ENV_VAR_KEY),
+        }
+    }
+
+    #[test]
+    fn test_get_encryption_key_for_current_repo_without_env_var() {
+        // Store original value to restore later
+        let original_value = std::env::var(ENV_VAR_KEY).ok();
+
+        // Ensure environment variable is not set
+        std::env::remove_var(ENV_VAR_KEY);
+
+        // This should fail because we don't have a real git repo or mobile-secrets setup
+        let result = get_encryption_key_for_current_repo();
+        assert!(result.is_err());
+
+        // Restore original environment state
+        match original_value {
+            Some(val) => std::env::set_var(ENV_VAR_KEY, val),
+            None => std::env::remove_var(ENV_VAR_KEY),
+        }
+    }
+
+    #[test]
+    fn test_constants() {
+        // Verify our constants are correct
+        assert_eq!(AES_GCM_NONCE_SIZE, 12);
+        assert_eq!(AES_256_KEY_SIZE, 32);
+        assert_eq!(MIN_ENCRYPTED_DATA_SIZE, AES_GCM_NONCE_SIZE + 1); // nonce + minimum data size
+    }
+}

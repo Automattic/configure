@@ -18,7 +18,12 @@ sha1 = "0.10"
 git2 = "0.19"
 anyhow = "1.0"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = "0.3"
+
+[dev-dependencies]
+mockall = "0.12"
+tempfile = "3.8"
+assert_fs = "1.1"
 
 [lints.clippy]
 # Enable additional lint groups for better code quality (lower priority so specific lints can override)
@@ -46,6 +51,7 @@ doc_markdown = "allow"  # Too picky about URL formatting
 
 # Cargo lints that are too noisy for this project
 cargo_common_metadata = "allow"  # We don't need full package metadata for internal tools
+
 
 # Nursery lints that might be too experimental
 option_if_let_else = "allow"

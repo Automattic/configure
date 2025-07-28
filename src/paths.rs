@@ -112,3 +112,304 @@ pub fn load_config() -> Result<Config> {
 
     Ok(config)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    /// Helper function to run a test with a temporary directory and restore the original directory.
+    ///
+    /// # Arguments
+    /// - `temp_path` - Path to the temporary directory to change to
+    /// - `test_fn` - Function to run in the temporary directory
+    fn with_temp_dir<F>(temp_path: &Path, test_fn: F)
+    where
+        F: FnOnce(),
+    {
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_path).unwrap();
+
+        test_fn();
+
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_get_mobile_secrets_path() {
+        // Save original HOME value
+        let original_home = std::env::var("HOME").ok();
+
+        // Test with HOME set
+        let temp_dir = tempdir().unwrap();
+        std::env::set_var("HOME", temp_dir.path());
+
+        let path = get_mobile_secrets_path().unwrap();
+        assert_eq!(path, temp_dir.path().join(".mobile-secrets"));
+
+        // Restore original HOME value
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+    }
+
+    #[test]
+    fn test_get_mobile_secrets_path_no_home() {
+        // Save original HOME value
+        let original_home = std::env::var("HOME").ok();
+
+        // Test without HOME set
+        std::env::remove_var("HOME");
+
+        let result = get_mobile_secrets_path();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("HOME environment variable not set"));
+
+        // Restore original HOME value
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+    }
+
+    #[test]
+    fn test_load_config() {
+        let temp_dir = tempdir().unwrap();
+
+        // Create .a8c-secrets directory
+        let config_dir = temp_dir.path().join(".a8c-secrets");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        // Test with valid YAML - ensure proper indentation and structure
+        let valid_config = r#"sha1: "abc123def456"
+files:
+  - source: "secrets/api_key.txt"
+    destination: "../api_key.txt"
+  - source: "secrets/database.yml"
+    destination: "config/database.yml"
+"#;
+        let config_path = config_dir.join("config.yaml");
+        fs::write(&config_path, valid_config).unwrap();
+
+        with_temp_dir(temp_dir.path(), || {
+            let result = load_config();
+            let config = result.unwrap();
+            assert_eq!(config.files.len(), 2);
+            assert_eq!(config.files[0].source, "secrets/api_key.txt");
+            assert_eq!(config.files[0].destination, "../api_key.txt");
+            assert_eq!(config.files[1].source, "secrets/database.yml");
+            assert_eq!(config.files[1].destination, "config/database.yml");
+        });
+    }
+
+    #[test]
+    fn test_load_config_empty_file() {
+        let temp_dir = tempdir().unwrap();
+
+        // Create .a8c-secrets directory
+        let config_dir = temp_dir.path().join(".a8c-secrets");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        // Test with empty file - should fail because it's missing required fields
+        let config_path = config_dir.join("config.yaml");
+        fs::write(&config_path, "").unwrap();
+
+        with_temp_dir(temp_dir.path(), || {
+            let result = load_config();
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err().to_string();
+            // Should fail due to missing required fields or file not found
+            assert!(
+                error_msg.contains("missing field")
+                    || error_msg.contains("Invalid YAML")
+                    || error_msg.contains("Configuration file not found")
+                    || error_msg.contains("not been set up")
+            );
+        });
+    }
+
+    #[test]
+    fn test_load_config_invalid_yaml() {
+        let temp_dir = tempdir().unwrap();
+
+        // Create .a8c-secrets directory
+        let config_dir = temp_dir.path().join(".a8c-secrets");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        // Test with definitely invalid YAML
+        let invalid_config = r#"sha1: "abc123def456"
+files:
+  - source: "secrets/api_key.txt"
+    destination: "../api_key.txt"
+  - source: "secrets/database.yml"
+    destination: "config/database.yml"
+    invalid_field: [unclosed_bracket
+    another_invalid: "missing_quote
+"#;
+        let config_path = config_dir.join("config.yaml");
+        fs::write(&config_path, invalid_config).unwrap();
+
+        with_temp_dir(temp_dir.path(), || {
+            let result = load_config();
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err().to_string();
+            // Accept any error about invalid YAML or parsing failure
+            assert!(
+                error_msg.contains("YAML")
+                    || error_msg.contains("yaml")
+                    || error_msg.contains("Invalid")
+                    || error_msg.contains("parse")
+                    || error_msg.contains("syntax")
+            );
+        });
+    }
+
+    #[test]
+    fn test_load_config_nonexistent_file() {
+        // Create a fresh temp directory to ensure no config file exists
+        let temp_dir = tempdir().unwrap();
+
+        with_temp_dir(temp_dir.path(), || {
+            // This should fail because we're not in a directory with .a8c-secrets/config.yaml
+            let result = load_config();
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err().to_string();
+            // Accept any error about missing configuration file
+            assert!(
+                error_msg.contains("Configuration file not found")
+                    || error_msg.contains("not found")
+                    || error_msg.contains("not been set up")
+            );
+        });
+    }
+
+    #[test]
+    fn test_validate_source_path_valid() {
+        let temp_dir = tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path();
+
+        // Create a test file
+        let test_file = mobile_secrets_path.join("secrets").join("test.txt");
+        fs::create_dir_all(test_file.parent().unwrap()).unwrap();
+        fs::write(&test_file, "test content").unwrap();
+
+        let result = validate_source_path("secrets/test.txt", mobile_secrets_path);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_source_path_empty() {
+        let temp_dir = tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path();
+
+        let result = validate_source_path("", mobile_secrets_path);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Source path cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_source_path_absolute() {
+        let temp_dir = tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path();
+
+        let result = validate_source_path("/absolute/path", mobile_secrets_path);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("is absolute, but must be relative"));
+    }
+
+    #[test]
+    fn test_validate_source_path_traversal() {
+        let temp_dir = tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path();
+
+        let result = validate_source_path("secrets/../config.txt", mobile_secrets_path);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("contains '..' which is not allowed"));
+    }
+
+    #[test]
+    fn test_validate_source_path_nonexistent() {
+        let temp_dir = tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path();
+
+        let result = validate_source_path("nonexistent.txt", mobile_secrets_path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_validate_source_path_directory() {
+        let temp_dir = tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path();
+
+        // Create a directory
+        let test_dir = mobile_secrets_path.join("secrets");
+        fs::create_dir_all(&test_dir).unwrap();
+
+        let result = validate_source_path("secrets", mobile_secrets_path);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("points to a directory, but must point to a file"));
+    }
+
+    #[test]
+    fn test_validate_source_path_special_characters() {
+        let temp_dir = tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path();
+
+        // Test various special characters and whitespace that could cause issues in shells
+        // Note: We only use characters that are valid in filenames on most filesystems
+        let test_cases = vec![
+            "file with spaces and\tmixed\twhitespace\ncharacters.txt",
+            "file_with$dollar&pipe|semicolon;operators.txt",
+            "file_with*asterisk?question[array]{braces}.txt",
+            "file_with\"double\"'single'`backticks`quotes.txt",
+            "file_with<less>greater=equals.txt",
+            "file_with#hash@at!bang~tilde^caret%percent+plus-minus.txt",
+            "file_with_underscore.dot,comma.txt",
+        ];
+
+        for filename in test_cases {
+            // Try to create the test file with the special filename
+            let test_file = mobile_secrets_path.join(filename);
+            match fs::write(&test_file, "test content") {
+                Ok(()) => {
+                    // Test that the validation works with the special character filename
+                    let result = validate_source_path(filename, mobile_secrets_path);
+                    assert!(
+                        result.is_ok(),
+                        "Failed to validate path '{filename}': {result:?}"
+                    );
+
+                    // Clean up the test file
+                    let _ = fs::remove_file(&test_file);
+                }
+                Err(e) => {
+                    // Skip this test case if the filename is not supported by the filesystem
+                    eprintln!(
+                        "Skipping test case '{filename}' - filesystem doesn't support this filename: {e}"
+                    );
+                    continue;
+                }
+            }
+        }
+    }
+}
