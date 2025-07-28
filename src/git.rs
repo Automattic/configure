@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::path::Path;
 
+/// Environment variable to skip prompts in tests
+const SKIP_PROMPT_ENV_VAR: &str = "A8C_SECRETS_SKIP_PROMPT_IF_MOBILE_SECRETS_BEHIND";
+
 /// Validates that the repository is not in a detached HEAD state.
 ///
 /// # Arguments
@@ -113,23 +116,30 @@ pub fn check_mobile_secrets_up_to_date(mobile_secrets_path: &Path) -> Result<()>
         println!("   cd ~/.mobile-secrets && git checkout trunk && git pull");
         println!();
 
-        // Ask user if they want to continue
-        println!("   Do you want to continue with the current version? (y/N)");
+        // Check if we should skip the prompt (useful for tests)
+        let user_wants_to_continue = if let Ok(value) = std::env::var(SKIP_PROMPT_ENV_VAR) {
+            let value = value.to_lowercase();
+            value != "no" && value != "false"
+        } else {
+            // Ask user if they want to continue
+            println!("   Do you want to continue with the current version? (y/N)");
 
-        let mut input = String::new();
-        if std::io::stdin().read_line(&mut input).is_ok() {
-            let input = input.trim().to_lowercase();
-            if input == "y" || input == "yes" {
-                println!("   Continuing with current version...");
-                return Ok(());
+            let mut input = String::new();
+            if std::io::stdin().read_line(&mut input).is_ok() {
+                let input = input.trim().to_lowercase();
+                input == "y" || input == "yes"
+            } else {
+                return Err(anyhow!("Failed to read user input"));
             }
-            return Err(anyhow!(
-                "Update cancelled. Please update ~/.mobile-secrets first:\n\
-                cd ~/.mobile-secrets && git checkout trunk && git pull"
-            ));
+        };
+
+        if user_wants_to_continue {
+            println!("   Continuing with current version...");
+            return Ok(());
         }
         return Err(anyhow!(
-            "Failed to read user input. Please update ~/.mobile-secrets first."
+            "Update cancelled. Please update ~/.mobile-secrets first:\n\
+            cd ~/.mobile-secrets && git checkout trunk && git pull"
         ));
     }
 
