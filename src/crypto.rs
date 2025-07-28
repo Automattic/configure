@@ -104,6 +104,7 @@ pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
 ///
 /// # Returns
 /// A 32-byte array containing random bytes suitable for AES-256 encryption
+#[must_use]
 pub fn generate_encryption_key() -> [u8; AES_256_KEY_SIZE] {
     use rand::RngCore;
     let mut key = [0u8; AES_256_KEY_SIZE];
