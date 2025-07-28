@@ -1,19 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use serde::{Deserialize, Serialize};
 
-mod commands;
-mod crypto;
-mod git;
-mod paths;
-
-use commands::{decrypt_command, encrypt_command, setup_command};
-
-// Constants for file names
-pub const REPO_SECRETS_DIR: &str = ".a8c-secrets";
-pub const REPO_SECRETS_CONFIG_FILE: &str = "config.yaml";
-pub const MOBILE_SECRETS_ENCRYPTION_KEYS_FILE: &str = "a8c-secrets-encryption-keys.yaml";
-pub const ENV_VAR_KEY: &str = "A8C_SECRETS_ENCRYPTION_KEY";
+use a8c_secrets::commands::{decrypt_command, encrypt_command, setup_command};
 
 #[derive(Parser)]
 #[command(name = "a8c-secrets")]
@@ -103,18 +91,6 @@ Use this command in local development or CI to make the secret files decrypted a
 "#
     )]
     Decrypt,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Config {
-    pub sha1: String,
-    pub files: Vec<SecretFileEntry>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SecretFileEntry {
-    pub source: String,
-    pub destination: String,
 }
 
 /// Main entry point for the a8c-secrets CLI tool.
