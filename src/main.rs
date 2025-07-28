@@ -120,9 +120,9 @@ fn main() -> Result<()> {
     tracing::info!("Starting a8c-secrets");
 
     let result = match cli.command {
-        Commands::Setup => setup_command(),
-        Commands::Encrypt => encrypt_command(),
-        Commands::Decrypt => decrypt_command(),
+        Commands::Setup => setup_command(&std::env::current_dir()?),
+        Commands::Encrypt => encrypt_command(&std::env::current_dir()?),
+        Commands::Decrypt => decrypt_command(&std::env::current_dir()?),
     };
 
     match &result {

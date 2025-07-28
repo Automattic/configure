@@ -22,8 +22,8 @@ dev: fmt lint test ## Run all development checks (format, lint, test)
 check: ## Quick compile check without building
 	cargo check
 
-test: ## Run all tests
-	cargo test
+test: ## Run all tests (sequentially to avoid race conditions with environment variables)
+	cargo test -- --test-threads=1
 
 # Code quality targets
 lint: ## Run clippy linter with comprehensive checks

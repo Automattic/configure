@@ -11,7 +11,7 @@ use crate::{Config, REPO_SECRETS_CONFIG_FILE, REPO_SECRETS_DIR};
 /// # Returns
 /// - `PathBuf` with the tilde expanded to the user's home directory if present
 /// - The original path unchanged if no tilde is present
-fn expand_tilde_path(path: &str) -> Result<PathBuf> {
+pub fn expand_tilde_path(path: &str) -> Result<PathBuf> {
     let path_buf = PathBuf::from(path);
     let mut components = path_buf.components();
 
@@ -110,13 +110,18 @@ pub fn get_mobile_secrets_path() -> Result<PathBuf> {
     Ok(PathBuf::from(home).join(".mobile-secrets"))
 }
 
-/// Loads the `.a8c-secrets/config.yaml` configuration file from the current directory.
+/// Loads the `.a8c-secrets/config.yaml` configuration file from the specified repository directory.
+///
+/// # Arguments
+/// - `repo_path` - Path to the repository directory containing the .a8c-secrets configuration
 ///
 /// # Returns
 /// - `Ok(Config)` containing the parsed configuration
 /// - `Err(anyhow::Error)` if the file doesn't exist, can't be read, or contains invalid YAML
-pub fn load_config() -> Result<Config> {
-    let config_path = Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
+pub fn load_config(repo_path: &Path) -> Result<Config> {
+    let config_path = repo_path
+        .join(REPO_SECRETS_DIR)
+        .join(REPO_SECRETS_CONFIG_FILE);
 
     if !config_path.exists() {
         return Err(anyhow!(
@@ -180,23 +185,6 @@ mod tests {
     use std::fs;
     use tempfile::tempdir;
 
-    /// Helper function to run a test with a temporary directory and restore the original directory.
-    ///
-    /// # Arguments
-    /// - `temp_path` - Path to the temporary directory to change to
-    /// - `test_fn` - Function to run in the temporary directory
-    fn with_temp_dir<F>(temp_path: &Path, test_fn: F)
-    where
-        F: FnOnce(),
-    {
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_path).unwrap();
-
-        test_fn();
-
-        std::env::set_current_dir(original_dir).unwrap();
-    }
-
     #[test]
     fn test_get_mobile_secrets_path() {
         // Save original HOME value
@@ -259,15 +247,13 @@ files:
         let config_path = config_dir.join("config.yaml");
         fs::write(&config_path, valid_config).unwrap();
 
-        with_temp_dir(temp_dir.path(), || {
-            let result = load_config();
-            let config = result.unwrap();
-            assert_eq!(config.files.len(), 2);
-            assert_eq!(config.files[0].source, "secrets/api_key.txt");
-            assert_eq!(config.files[0].destination, "../api_key.txt");
-            assert_eq!(config.files[1].source, "secrets/database.yml");
-            assert_eq!(config.files[1].destination, "config/database.yml");
-        });
+        let result = load_config(temp_dir.path());
+        let config = result.unwrap();
+        assert_eq!(config.files.len(), 2);
+        assert_eq!(config.files[0].source, "secrets/api_key.txt");
+        assert_eq!(config.files[0].destination, "../api_key.txt");
+        assert_eq!(config.files[1].source, "secrets/database.yml");
+        assert_eq!(config.files[1].destination, "config/database.yml");
     }
 
     #[test]
@@ -282,18 +268,16 @@ files:
         let config_path = config_dir.join("config.yaml");
         fs::write(&config_path, "").unwrap();
 
-        with_temp_dir(temp_dir.path(), || {
-            let result = load_config();
-            assert!(result.is_err());
-            let error_msg = result.unwrap_err().to_string();
-            // Should fail due to missing required fields or file not found
-            assert!(
-                error_msg.contains("missing field")
-                    || error_msg.contains("Invalid YAML")
-                    || error_msg.contains("Configuration file not found")
-                    || error_msg.contains("not been set up")
-            );
-        });
+        let result = load_config(temp_dir.path());
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // Should fail due to missing required fields or file not found
+        assert!(
+            error_msg.contains("missing field")
+                || error_msg.contains("Invalid YAML")
+                || error_msg.contains("Configuration file not found")
+                || error_msg.contains("not been set up")
+        );
     }
 
     #[test]
@@ -317,19 +301,17 @@ files:
         let config_path = config_dir.join("config.yaml");
         fs::write(&config_path, invalid_config).unwrap();
 
-        with_temp_dir(temp_dir.path(), || {
-            let result = load_config();
-            assert!(result.is_err());
-            let error_msg = result.unwrap_err().to_string();
-            // Accept any error about invalid YAML or parsing failure
-            assert!(
-                error_msg.contains("YAML")
-                    || error_msg.contains("yaml")
-                    || error_msg.contains("Invalid")
-                    || error_msg.contains("parse")
-                    || error_msg.contains("syntax")
-            );
-        });
+        let result = load_config(temp_dir.path());
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // Accept any error about invalid YAML or parsing failure
+        assert!(
+            error_msg.contains("YAML")
+                || error_msg.contains("yaml")
+                || error_msg.contains("Invalid")
+                || error_msg.contains("parse")
+                || error_msg.contains("syntax")
+        );
     }
 
     #[test]
@@ -337,18 +319,16 @@ files:
         // Create a fresh temp directory to ensure no config file exists
         let temp_dir = tempdir().unwrap();
 
-        with_temp_dir(temp_dir.path(), || {
-            // This should fail because we're not in a directory with .a8c-secrets/config.yaml
-            let result = load_config();
-            assert!(result.is_err());
-            let error_msg = result.unwrap_err().to_string();
-            // Accept any error about missing configuration file
-            assert!(
-                error_msg.contains("Configuration file not found")
-                    || error_msg.contains("not found")
-                    || error_msg.contains("not been set up")
-            );
-        });
+        // This should fail because we're not in a directory with .a8c-secrets/config.yaml
+        let result = load_config(temp_dir.path());
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        // Accept any error about missing configuration file
+        assert!(
+            error_msg.contains("Configuration file not found")
+                || error_msg.contains("not found")
+                || error_msg.contains("not been set up")
+        );
     }
 
     #[test]
@@ -468,7 +448,6 @@ files:
                     eprintln!(
                         "Skipping test case '{filename}' - filesystem doesn't support this filename: {e}"
                     );
-                    continue;
                 }
             }
         }
@@ -476,7 +455,12 @@ files:
 
     #[test]
     fn test_load_config_with_tilde_destination() {
+        // Save original HOME value
+        let original_home = std::env::var("HOME").ok();
+
+        // Test with HOME set
         let temp_dir = tempdir().unwrap();
+        std::env::set_var("HOME", temp_dir.path());
 
         // Create .a8c-secrets directory
         let config_dir = temp_dir.path().join(".a8c-secrets");
@@ -491,15 +475,20 @@ files:
         let config_path = config_dir.join("config.yaml");
         fs::write(&config_path, config_with_tilde).unwrap();
 
-        with_temp_dir(temp_dir.path(), || {
-            let result = load_config();
-            let config = result.unwrap();
-            assert_eq!(config.files.len(), 1);
-            assert_eq!(config.files[0].source, "secrets/api_key.txt");
-            // The tilde should be expanded during load_config
-            assert!(!config.files[0].destination.starts_with('~'));
-            assert!(config.files[0].destination.contains(".my-app"));
-        });
+        let result = load_config(temp_dir.path());
+        let config = result.unwrap();
+        assert_eq!(config.files.len(), 1);
+        assert_eq!(config.files[0].source, "secrets/api_key.txt");
+        // The tilde should be expanded during load_config
+        assert!(!config.files[0].destination.starts_with('~'));
+        assert!(config.files[0].destination.contains(".my-app"));
+
+        // Restore original HOME value
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
     }
 
     #[test]

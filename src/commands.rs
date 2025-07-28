@@ -6,11 +6,11 @@ use std::path::Path;
 use tracing::{debug, info};
 
 use crate::crypto::{
-    decrypt_data, encrypt_data, generate_encryption_key, get_encryption_key_for_current_repo,
+    decrypt_data, encrypt_data, generate_encryption_key, get_encryption_key_for_repo,
 };
 use crate::git::{
-    check_mobile_secrets_up_to_date, ensure_destination_is_git_ignored, get_current_repo_name,
-    get_mobile_secrets_head_sha1,
+    check_mobile_secrets_up_to_date, ensure_destination_is_git_ignored,
+    get_mobile_secrets_head_sha1, get_repo_name,
 };
 use crate::paths::{get_mobile_secrets_path, load_config, validate_source_path};
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
     REPO_SECRETS_DIR,
 };
 
-/// Sets up or validates secrets configuration for the current repository.
+/// Sets up or validates secrets configuration for the specified repository.
 ///
 /// This function:
 /// - If no setup exists: Creates configuration and generates encryption key
@@ -35,20 +35,25 @@ use crate::{
 /// - Checks if encryption key exists
 /// - Displays current setup status
 ///
+/// # Arguments
+/// - `repo_path` - Path to the repository directory
+///
 /// # Returns
 /// - `Ok(())` if setup/validation succeeds
 /// - `Err(anyhow::Error)` if any step fails (git operations, file I/O, validation errors, etc.)
-pub fn setup_command() -> Result<()> {
+pub fn setup_command(repo_path: &Path) -> Result<()> {
     info!("Running setup command");
     let mobile_secrets_path = get_mobile_secrets_path()?;
     debug!("Mobile secrets path: {}", mobile_secrets_path.display());
 
-    let config_path = std::path::Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
+    let config_path = repo_path
+        .join(REPO_SECRETS_DIR)
+        .join(REPO_SECRETS_CONFIG_FILE);
     let config_exists = config_path.exists();
     debug!("Config file exists: {}", config_exists);
 
     // Check if encryption key already exists
-    let repo_name = get_current_repo_name()?;
+    let repo_name = get_repo_name(repo_path)?;
     debug!("Repository name: {}", repo_name);
 
     let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
@@ -79,15 +84,20 @@ pub fn setup_command() -> Result<()> {
             &repo_name,
             &keys_file_path,
             &config_path,
+            repo_path,
         );
     }
 
     // Proceed with initial setup
-    perform_initial_setup(&mobile_secrets_path, &repo_name)
+    perform_initial_setup(&mobile_secrets_path, &repo_name, repo_path)
 }
 
 /// Performs the initial setup when no existing configuration is found.
-pub fn perform_initial_setup(mobile_secrets_path: &std::path::Path, repo_name: &str) -> Result<()> {
+pub fn perform_initial_setup(
+    mobile_secrets_path: &std::path::Path,
+    repo_name: &str,
+    repo_path: &Path,
+) -> Result<()> {
     println!("🚀 Setting up secrets configuration for the first time...");
     println!();
 
@@ -100,7 +110,8 @@ pub fn perform_initial_setup(mobile_secrets_path: &std::path::Path, repo_name: &
     };
 
     // Create .a8c-secrets directory
-    fs::create_dir_all(REPO_SECRETS_DIR)?;
+    let secrets_dir = repo_path.join(REPO_SECRETS_DIR);
+    fs::create_dir_all(&secrets_dir)?;
 
     // Write config file with examples
     let config_yaml_with_examples = format!(
@@ -117,7 +128,7 @@ files: []
 "#,
         config.sha1
     );
-    let config_path = Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
+    let config_path = secrets_dir.join(REPO_SECRETS_CONFIG_FILE);
     fs::write(&config_path, config_yaml_with_examples)?;
 
     // Generate encryption key
@@ -176,13 +187,14 @@ pub fn validate_and_display_setup(
     repo_name: &str,
     keys_file_path: &std::path::Path,
     config_path: &std::path::Path,
+    repo_path: &Path,
 ) -> Result<()> {
     println!("🔍 Existing setup detected - validating configuration...");
     println!();
 
     // Validate and display config file
     if config_exists {
-        match load_config() {
+        match load_config(repo_path) {
             Ok(config) => {
                 println!("✅ Configuration file: {}", config_path.display());
                 println!("   📋 SHA1: {}", config.sha1);
@@ -255,18 +267,22 @@ pub fn validate_and_display_setup(
     Ok(())
 }
 
-/// Encrypts secrets from ~/.mobile-secrets into the current repository.
+/// Encrypts secrets from ~/.mobile-secrets to .a8c-secrets/*.enc files.
 ///
 /// This function:
-/// - Loads the current `.a8c-secrets/config.yaml` configuration
-/// - Updates the SHA1 to match the current HEAD of ~/.mobile-secrets
-/// - Encrypts each configured secret file using the repository's unique key
-/// - Saves encrypted files as `.a8c-secrets/*.enc` binary files
+/// - Loads the `.a8c-secrets/config.yaml` configuration
+/// - Obtains the encryption key from environment variable or ~/.mobile-secrets
+/// - Reads each source file from ~/.mobile-secrets
+/// - Encrypts the content and writes to `.a8c-secrets/*.enc` files
+/// - Updates the SHA1 in the config to match current ~/.mobile-secrets HEAD
+///
+/// # Arguments
+/// - `repo_path` - Path to the repository directory
 ///
 /// # Returns
-/// - `Ok(())` if all secrets are successfully encrypted and saved
-/// - `Err(anyhow::Error)` if configuration loading, encryption, or file I/O fails
-pub fn encrypt_command() -> Result<()> {
+/// - `Ok(())` if all secrets are successfully encrypted and written
+/// - `Err(anyhow::Error)` if key retrieval, encryption, or file I/O fails
+pub fn encrypt_command(repo_path: &Path) -> Result<()> {
     info!("Running encrypt command");
     let mobile_secrets_path = get_mobile_secrets_path()?;
     debug!("Mobile secrets path: {}", mobile_secrets_path.display());
@@ -274,29 +290,30 @@ pub fn encrypt_command() -> Result<()> {
     // Check if mobile-secrets repository is up-to-date
     check_mobile_secrets_up_to_date(&mobile_secrets_path)?;
 
-    let mut config = load_config()?;
+    let mut config = load_config(repo_path)?;
     debug!("Loaded config with {} files", config.files.len());
-    let key = get_encryption_key_for_current_repo()?;
+
+    let repo_name = get_repo_name(repo_path)?;
+    let mobile_secrets_path = get_mobile_secrets_path()?;
+    let key = get_encryption_key_for_repo(&repo_name, &mobile_secrets_path)?;
 
     // Update SHA1 to current HEAD of mobile-secrets repo
     config.sha1 = get_mobile_secrets_head_sha1(&mobile_secrets_path)?;
 
     // Write updated config back to file
     let config_yaml = serde_yaml::to_string(&config)?;
-    let config_path = Path::new(REPO_SECRETS_DIR).join(REPO_SECRETS_CONFIG_FILE);
+    let config_path = repo_path
+        .join(REPO_SECRETS_DIR)
+        .join(REPO_SECRETS_CONFIG_FILE);
     fs::write(&config_path, config_yaml)?;
 
     // Create secrets directory (should already exist, but ensure it does)
-    fs::create_dir_all(REPO_SECRETS_DIR)?;
+    let secrets_dir = repo_path.join(REPO_SECRETS_DIR);
+    fs::create_dir_all(&secrets_dir)?;
 
     if config.files.is_empty() {
         println!("⚠️  No secret files configured for encryption.");
-        println!(
-            "Edit {} to add files to sync.",
-            Path::new(REPO_SECRETS_DIR)
-                .join(REPO_SECRETS_CONFIG_FILE)
-                .display()
-        );
+        println!("Edit {} to add files to sync.", config_path.display());
         return Ok(());
     }
 
@@ -312,7 +329,7 @@ pub fn encrypt_command() -> Result<()> {
         let source_path = mobile_secrets_path.join(&file_config.source);
 
         // Check if the destination file would be ignored by git
-        ensure_destination_is_git_ignored(&file_config.destination)?;
+        ensure_destination_is_git_ignored(&file_config.destination, repo_path)?;
 
         let content = fs::read(&source_path).map_err(|e| {
             anyhow!(
@@ -341,18 +358,22 @@ pub fn encrypt_command() -> Result<()> {
                     file_config.source
                 )
             })?;
-        let encrypted_path = format!("{REPO_SECRETS_DIR}/{dest_filename}.enc");
+        let encrypted_path = secrets_dir.join(format!("{dest_filename}.enc"));
 
         fs::write(&encrypted_path, encrypted).map_err(|e| {
             anyhow!(
                 "Failed to write encrypted file {}: {}\n\n\
-                Please check that you have write permissions in the current directory.",
-                encrypted_path,
+                Please check that you have write permissions in the repository directory.",
+                encrypted_path.display(),
                 e
             )
         })?;
 
-        println!("Encrypted {} -> {}", file_config.source, encrypted_path);
+        println!(
+            "Encrypted {} -> {}",
+            file_config.source,
+            encrypted_path.display()
+        );
     }
 
     println!("✅ Encryption of secrets files from `~/.mobile-secrets` into `.enc` files in your repository is complete!");
@@ -373,20 +394,27 @@ pub fn encrypt_command() -> Result<()> {
 /// - Writes decrypted content to the destination paths specified in config
 /// - Creates destination directories as needed
 ///
+/// # Arguments
+/// - `repo_path` - Path to the repository directory
+///
 /// # Returns
 /// - `Ok(())` if all secrets are successfully decrypted and written
 /// - `Err(anyhow::Error)` if key retrieval, decryption, or file I/O fails
-pub fn decrypt_command() -> Result<()> {
+pub fn decrypt_command(repo_path: &Path) -> Result<()> {
     info!("Running decrypt command");
-    let config = load_config()?;
+    let config = load_config(repo_path)?;
     debug!("Loaded config with {} files", config.files.len());
-    let key = get_encryption_key_for_current_repo()?;
+
+    let repo_name = get_repo_name(repo_path)?;
+    let mobile_secrets_path = get_mobile_secrets_path()?;
+    let key = get_encryption_key_for_repo(&repo_name, &mobile_secrets_path)?;
 
     if config.files.is_empty() {
         println!("⚠️  No secret files configured for decryption.");
         println!(
             "Edit {} to add files to sync.",
-            Path::new(REPO_SECRETS_DIR)
+            repo_path
+                .join(REPO_SECRETS_DIR)
                 .join(REPO_SECRETS_CONFIG_FILE)
                 .display()
         );
@@ -399,8 +427,15 @@ pub fn decrypt_command() -> Result<()> {
             file_config.source, file_config.destination
         );
 
+        // Construct the full destination path
+        let destination_path = if Path::new(&file_config.destination).is_absolute() {
+            Path::new(&file_config.destination).to_path_buf()
+        } else {
+            repo_path.join(&file_config.destination)
+        };
+
         // Check if the destination file would be ignored by git (early validation)
-        ensure_destination_is_git_ignored(&file_config.destination)?;
+        ensure_destination_is_git_ignored(&file_config.destination, repo_path)?;
 
         let source_filename = Path::new(&file_config.source)
             .file_name()
@@ -418,9 +453,11 @@ pub fn decrypt_command() -> Result<()> {
                     file_config.source
                 )
             })?;
-        let encrypted_path = format!("{REPO_SECRETS_DIR}/{source_filename}.enc");
+        let encrypted_path = repo_path
+            .join(REPO_SECRETS_DIR)
+            .join(format!("{source_filename}.enc"));
 
-        if !Path::new(&encrypted_path).exists() {
+        if !encrypted_path.exists() {
             return Err(anyhow!(
                 "Encrypted file not found: {}\n\n\
                 Expected location: {}\n\
@@ -431,7 +468,7 @@ pub fn decrypt_command() -> Result<()> {
                 2. The source filename in the configuration is incorrect\n\
                 3. The encrypted file was manually deleted",
                 source_filename,
-                encrypted_path,
+                encrypted_path.display(),
                 file_config.source,
                 file_config.destination
             ));
@@ -441,7 +478,7 @@ pub fn decrypt_command() -> Result<()> {
             anyhow!(
                 "Failed to read encrypted file {}: {}\n\n\
                 Please check that you have read permissions for the file.",
-                encrypted_path,
+                encrypted_path.display(),
                 e
             )
         })?;
@@ -453,13 +490,13 @@ pub fn decrypt_command() -> Result<()> {
                 1. The file was corrupted\n\
                 2. Wrong encryption key for this repository\n\
                 3. The file was not encrypted with a8c-secrets",
-                encrypted_path,
+                encrypted_path.display(),
                 e
             )
         })?;
 
         // Ensure destination directory exists
-        if let Some(parent) = Path::new(&file_config.destination).parent() {
+        if let Some(parent) = destination_path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
                 anyhow!(
                     "Failed to create destination directory {}: {}\n\n\
@@ -470,18 +507,19 @@ pub fn decrypt_command() -> Result<()> {
             })?;
         }
 
-        fs::write(&file_config.destination, decrypted).map_err(|e| {
+        fs::write(&destination_path, decrypted).map_err(|e| {
             anyhow!(
                 "Failed to write decrypted file {}: {}\n\n\
                 Please check that you have write permissions for the destination.",
-                file_config.destination,
+                destination_path.display(),
                 e
             )
         })?;
 
         println!(
             "Decrypted {} -> {}",
-            encrypted_path, file_config.destination
+            encrypted_path.display(),
+            destination_path.display()
         );
     }
 

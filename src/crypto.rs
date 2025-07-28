@@ -2,11 +2,11 @@ use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
 use std::fs;
+use std::path::Path;
 
 use crate::{ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE};
 
-use crate::git::get_current_repo_name;
-use crate::paths::get_mobile_secrets_path;
+use tracing::debug;
 
 /// AES-256-GCM nonce size in bytes
 pub const AES_GCM_NONCE_SIZE: usize = 12;
@@ -17,18 +17,23 @@ pub const AES_256_KEY_SIZE: usize = 32;
 /// Minimum size for encrypted data (nonce + at least 1 byte of ciphertext)
 pub const MIN_ENCRYPTED_DATA_SIZE: usize = AES_GCM_NONCE_SIZE + 1;
 
-/// Retrieves the encryption key for the current repository.
+/// Retrieves the encryption key for the specified repository.
 ///
-/// Attempts to get the key from:
-/// 1. `A8C_SECRETS_ENCRYPTION_KEY` environment variable (base64 encoded)
+/// This function looks for the encryption key in the following order:
+/// 1. Environment variable `A8C_SECRETS_ENCRYPTION_KEY` (for CI/CD environments)
 /// 2. `~/.mobile-secrets/a8c-secrets-encryption-keys.yaml` file
 ///
+/// # Arguments
+/// - `repo_name` - Name of the repository to get the encryption key for
+/// - `mobile_secrets_path` - Path to the mobile-secrets directory
+///
 /// # Returns
-/// - `Ok(Vec<u8>)` containing the raw encryption key bytes
-/// - `Err(anyhow::Error)` if neither source is available, key is not found for this repo, or base64 decoding fails
-pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
-    // Try to get encryption key from environment variable first
+/// - `Ok(Vec<u8>)` containing the decrypted encryption key
+/// - `Err(anyhow::Error)` if key retrieval or decryption fails
+pub fn get_encryption_key_for_repo(repo_name: &str, mobile_secrets_path: &Path) -> Result<Vec<u8>> {
+    // First, check if the key is provided via environment variable (for CI/CD)
     if let Ok(key_b64) = std::env::var(ENV_VAR_KEY) {
+        debug!("Using encryption key from environment variable");
         return general_purpose::STANDARD.decode(key_b64).map_err(|e| {
             anyhow!(
                 "Invalid base64 encoding in {} environment variable: {}\n\n\
@@ -39,26 +44,22 @@ pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
         });
     }
 
-    // Otherwise, load from keys file
-    let mobile_secrets_path = get_mobile_secrets_path()?;
+    // Otherwise, load from the keys file
     let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
 
     if !keys_file_path.exists() {
         return Err(anyhow!(
-            "No encryption key available for this repository.\n\n\
-            Neither {} environment variable is set nor {} exists.\n\n\
-            For local development: Run 'a8c-secrets setup' to generate an encryption key.\n\
-            For CI: Set the {} environment variable with the repository's encryption key.",
-            ENV_VAR_KEY,
-            keys_file_path.display(),
-            ENV_VAR_KEY
+            "Encryption keys file not found: {}\n\n\
+            This repository has not been set up for a8c-secrets yet.\n\
+            Run 'a8c-secrets setup' to initialize the configuration and generate encryption keys.",
+            keys_file_path.display()
         ));
     }
 
     let keys_content = fs::read_to_string(&keys_file_path).map_err(|e| {
         anyhow!(
             "Failed to read encryption keys file {}: {}\n\n\
-            Please check that the file exists and you have read permissions.",
+            Please check that you have read permissions for the file.",
             keys_file_path.display(),
             e
         )
@@ -73,19 +74,13 @@ pub fn get_encryption_key_for_current_repo() -> Result<Vec<u8>> {
         )
     })?;
 
-    let repo_name = get_current_repo_name()?;
-    let key_b64 = keys.get(&repo_name).ok_or_else(|| {
+    let key_b64 = keys.get(repo_name).ok_or_else(|| {
         anyhow!(
-            "No encryption key found for repository '{}' in {}.\n\n\
-            Available repositories: {}\n\n\
-            Run 'a8c-secrets setup' to generate an encryption key for this repository.",
+            "No encryption key found for repository '{}' in {}\n\n\
+            This repository has not been set up for a8c-secrets yet.\n\
+            Run 'a8c-secrets setup' to initialize the configuration and generate encryption keys.",
             repo_name,
-            keys_file_path.display(),
-            if keys.is_empty() {
-                "none".to_string()
-            } else {
-                keys.keys().cloned().collect::<Vec<_>>().join(", ")
-            }
+            keys_file_path.display()
         )
     })?;
 
@@ -181,6 +176,7 @@ pub fn decrypt_data(encrypted_data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     use rand::RngCore;
+    use tempfile;
 
     #[test]
     fn test_generate_encryption_key() {
@@ -289,7 +285,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_encryption_key_for_current_repo_with_env_var() {
+    fn test_get_encryption_key_for_repo_with_env_var() {
         // Generate a random 32-byte key and base64-encode it
         let mut raw_key = [0u8; AES_256_KEY_SIZE];
         rand::thread_rng().fill_bytes(&mut raw_key);
@@ -301,7 +297,12 @@ mod tests {
         // Set the environment variable
         std::env::set_var(ENV_VAR_KEY, &test_key);
 
-        let result = get_encryption_key_for_current_repo();
+        // Create a temporary directory for mobile-secrets
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path().join(".mobile-secrets");
+        std::fs::create_dir_all(&mobile_secrets_path).unwrap();
+
+        let result = get_encryption_key_for_repo("test-repo", &mobile_secrets_path);
         assert!(result.is_ok());
         let key = result.unwrap();
         assert_eq!(key.len(), AES_256_KEY_SIZE);
@@ -315,15 +316,62 @@ mod tests {
     }
 
     #[test]
-    fn test_get_encryption_key_for_current_repo_without_env_var() {
+    fn test_get_encryption_key_for_repo_without_env_var() {
         // Store original value to restore later
         let original_value = std::env::var(ENV_VAR_KEY).ok();
 
         // Ensure environment variable is not set
         std::env::remove_var(ENV_VAR_KEY);
 
-        // This should fail because we don't have a real git repo or mobile-secrets setup
-        let result = get_encryption_key_for_current_repo();
+        // Create a temporary directory for mobile-secrets (empty, so no keys file)
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path().join(".mobile-secrets");
+        std::fs::create_dir_all(&mobile_secrets_path).unwrap();
+
+        // This should fail because there's no keys file in the temp directory
+        let result = get_encryption_key_for_repo("test-repo", &mobile_secrets_path);
+        assert!(result.is_err());
+
+        // Restore original environment state
+        match original_value {
+            Some(val) => std::env::set_var(ENV_VAR_KEY, val),
+            None => std::env::remove_var(ENV_VAR_KEY),
+        }
+    }
+
+    #[test]
+    fn test_get_encryption_key_for_repo_from_keys_file() {
+        // Store original value to restore later
+        let original_value = std::env::var(ENV_VAR_KEY).ok();
+
+        // Ensure environment variable is not set
+        std::env::remove_var(ENV_VAR_KEY);
+
+        // Create a temporary directory for mobile-secrets
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mobile_secrets_path = temp_dir.path().join(".mobile-secrets");
+        std::fs::create_dir_all(&mobile_secrets_path).unwrap();
+
+        // Create a keys file with a test key
+        let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
+        let test_key_b64 = "dGVzdC1rZXktZm9yLXRlc3RpbmctcHVycG9zZXMtMzI="; // "test-key-for-testing-purposes-32"
+        let keys_content = format!("test-repo: {test_key_b64}");
+        std::fs::write(&keys_file_path, keys_content).unwrap();
+
+        // This should succeed and return the key from the file
+        let result = get_encryption_key_for_repo("test-repo", &mobile_secrets_path);
+        assert!(result.is_ok());
+        let key = result.unwrap();
+        assert_eq!(key.len(), AES_256_KEY_SIZE);
+
+        // Verify the key matches what we put in the file
+        let expected_key = base64::engine::general_purpose::STANDARD
+            .decode(test_key_b64)
+            .unwrap();
+        assert_eq!(key, expected_key);
+
+        // Test that requesting a non-existent repo fails
+        let result = get_encryption_key_for_repo("non-existent-repo", &mobile_secrets_path);
         assert!(result.is_err());
 
         // Restore original environment state
