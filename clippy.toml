@@ -1,0 +1,29 @@
+# Clippy configuration for modern Rust development
+# This enables additional lints beyond the default set for better code quality
+
+# Enable commonly recommended lint groups
+# Note: These are in addition to the default "correctness" group which is always enabled
+
+# Style improvements and modern Rust conventions
+disallowed-macros = []
+disallowed-methods = []
+disallowed-types = []
+
+# Performance and efficiency
+avoid-breaking-exported-api = false
+msrv = "1.70"  # Minimum supported Rust version
+
+# Complexity thresholds
+cognitive-complexity-threshold = 30
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250
+single-char-binding-names-threshold = 4
+
+# Documentation requirements  
+missing-docs-in-crate-items = false  # Set to true if you want to enforce documentation on all public items
+
+# Naming conventions
+enum-variant-name-threshold = 3
+
+# Import organization
+max-fn-params-bools = 3

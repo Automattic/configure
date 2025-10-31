@@ -1,0 +1,529 @@
+use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose, Engine as _};
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
+use tracing::{debug, info};
+
+use crate::crypto::{
+    decrypt_data, encrypt_data, generate_encryption_key, get_encryption_key_for_repo,
+};
+use crate::git::{
+    check_mobile_secrets_up_to_date, ensure_destination_is_git_ignored,
+    get_mobile_secrets_head_sha1, get_repo_name,
+};
+use crate::paths::{get_mobile_secrets_path, load_config, validate_source_path};
+use crate::{
+    Config, ENV_VAR_KEY, MOBILE_SECRETS_ENCRYPTION_KEYS_FILE, REPO_SECRETS_CONFIG_FILE,
+    REPO_SECRETS_DIR,
+};
+
+/// Sets up or validates secrets configuration for the specified repository.
+///
+/// This function:
+/// - If no setup exists: Creates configuration and generates encryption key
+/// - If setup exists: Validates and displays current configuration
+///
+/// For initial setup:
+/// - Creates a `.a8c-secrets/config.yaml` configuration file with the current SHA1 of ~/.mobile-secrets
+/// - Generates a unique AES-256 encryption key for this repository
+/// - Stores the key in `~/.mobile-secrets/a8c-secrets-encryption-keys.yaml`
+/// - Provides setup instructions for CI environments
+///
+/// For existing setup:
+/// - Validates the configuration file structure
+/// - Checks if encryption key exists
+/// - Displays current setup status
+///
+/// # Arguments
+/// - `repo_path` - Path to the repository directory
+///
+/// # Returns
+/// - `Ok(())` if setup/validation succeeds
+/// - `Err(anyhow::Error)` if any step fails (git operations, file I/O, validation errors, etc.)
+pub fn setup_command(repo_path: &Path) -> Result<()> {
+    info!("Running setup command");
+    let mobile_secrets_path = get_mobile_secrets_path()?;
+    debug!("Mobile secrets path: {}", mobile_secrets_path.display());
+
+    let config_path = repo_path
+        .join(REPO_SECRETS_DIR)
+        .join(REPO_SECRETS_CONFIG_FILE);
+    let config_exists = config_path.exists();
+    debug!("Config file exists: {}", config_exists);
+
+    // Check if encryption key already exists
+    let repo_name = get_repo_name(repo_path)?;
+    debug!("Repository name: {}", repo_name);
+
+    let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
+    let key_exists = if keys_file_path.exists() {
+        debug!("Keys file exists, checking for repository key");
+        let keys_content = fs::read_to_string(&keys_file_path)?;
+        let keys: HashMap<String, String> = serde_yaml::from_str(&keys_content).map_err(|e| {
+            anyhow!(
+                "Invalid YAML syntax in encryption keys file {}: {}\n\n\
+                The file should contain a mapping of repository names to base64-encoded keys.",
+                keys_file_path.display(),
+                e
+            )
+        })?;
+        let exists = keys.contains_key(&repo_name);
+        debug!("Repository key exists: {}", exists);
+        exists
+    } else {
+        debug!("Keys file does not exist");
+        false
+    };
+
+    // If setup already exists, validate and display instead of creating
+    if config_exists || key_exists {
+        return validate_and_display_setup(
+            config_exists,
+            key_exists,
+            &repo_name,
+            &keys_file_path,
+            &config_path,
+            repo_path,
+        );
+    }
+
+    // Proceed with initial setup
+    perform_initial_setup(&mobile_secrets_path, &repo_name, repo_path)
+}
+
+/// Performs the initial setup when no existing configuration is found.
+pub fn perform_initial_setup(
+    mobile_secrets_path: &std::path::Path,
+    repo_name: &str,
+    repo_path: &Path,
+) -> Result<()> {
+    println!("🚀 Setting up secrets configuration for the first time...");
+    println!();
+
+    let sha1 = get_mobile_secrets_head_sha1(mobile_secrets_path)?;
+
+    // Create initial config
+    let config = Config {
+        sha1,
+        files: Vec::new(),
+    };
+
+    // Create .a8c-secrets directory
+    let secrets_dir = repo_path.join(REPO_SECRETS_DIR);
+    fs::create_dir_all(&secrets_dir)?;
+
+    // Write config file with examples
+    let config_yaml_with_examples = format!(
+        r#"sha1: {}
+files: []
+# Example entries - edit this section to specify which secret files to sync:
+# files:
+#   - source: "path/to/secrets.properties" # Path relative to ~/.mobile-secrets
+#     destination: "config/secret1.json"   # Path relative to current repository
+#     # Prefer decrypting files outside of your repository if possible, so that you don't risk committing them
+#     # by accident but also don't risk them being scanned by LLMs you might use on your machine.
+#   - source: "shared/Secrets.swift"
+#     destination: "~/.a8c-secrets/myapp/Secrets.swift"
+"#,
+        config.sha1
+    );
+    let config_path = secrets_dir.join(REPO_SECRETS_CONFIG_FILE);
+    fs::write(&config_path, config_yaml_with_examples)?;
+
+    // Generate encryption key
+    let key = generate_encryption_key();
+    let key_b64 = general_purpose::STANDARD.encode(key);
+
+    // Update encryption keys file
+    let keys_file_path = mobile_secrets_path.join(MOBILE_SECRETS_ENCRYPTION_KEYS_FILE);
+    let mut keys: HashMap<String, String> = if keys_file_path.exists() {
+        let keys_content = fs::read_to_string(&keys_file_path)?;
+        serde_yaml::from_str(&keys_content).map_err(|e| {
+            anyhow!(
+                "Invalid YAML syntax in encryption keys file {}: {}\n\n\
+                The file should contain a mapping of repository names to base64-encoded keys.",
+                keys_file_path.display(),
+                e
+            )
+        })?
+    } else {
+        HashMap::new()
+    };
+
+    keys.insert(repo_name.to_owned(), key_b64.clone());
+    let keys_yaml = serde_yaml::to_string(&keys)?;
+    fs::write(&keys_file_path, keys_yaml)?;
+
+    println!(
+        "✅ Configuration file '{}' created successfully.",
+        config_path.display()
+    );
+    println!(
+        "✅ Encryption key generated and saved to {}",
+        keys_file_path.display()
+    );
+    println!("🎉 Setup complete!");
+    println!("📋 Next steps:");
+    println!("1. Add the following environment variable to ~/.mobile-secrets/CI/secrets/{repo_name}/env for CI:");
+    println!();
+    println!("   export {ENV_VAR_KEY}=\"{key_b64}\"");
+    println!();
+    println!("2. Commit and push the changes to `~/.mobile-secrets`'s `trunk` branch directly.");
+    println!("   (Both the manual changes you made to the `env` file and the change the setup script made of the `{MOBILE_SECRETS_ENCRYPTION_KEYS_FILE}` file)");
+    println!(
+        "3. Edit {} to specify which secret files you want to sync for your repository.",
+        config_path.display()
+    );
+    println!("4. Run `a8c-secrets encrypt` to encrypt those secrets files into your repository.");
+
+    Ok(())
+}
+
+/// Validates existing setup and displays current configuration.
+pub fn validate_and_display_setup(
+    config_exists: bool,
+    key_exists: bool,
+    repo_name: &str,
+    keys_file_path: &std::path::Path,
+    config_path: &std::path::Path,
+    repo_path: &Path,
+) -> Result<()> {
+    println!("🔍 Existing setup detected - validating configuration...");
+    println!();
+
+    // Validate and display config file
+    if config_exists {
+        match load_config(repo_path) {
+            Ok(config) => {
+                println!("✅ Configuration file: {}", config_path.display());
+                println!("   📋 SHA1: {}", config.sha1);
+                println!("   📁 Secret files configured: {}", config.files.len());
+                if config.files.is_empty() {
+                    println!(
+                        "   ⚠️  No secret files configured yet - edit {} to add them",
+                        config_path.display()
+                    );
+                } else {
+                    for (i, file) in config.files.iter().enumerate() {
+                        println!("   {}. {} → {}", i + 1, file.source, file.destination);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("❌ Configuration file: {}", config_path.display());
+                println!("   Error: Invalid YAML structure - {e}");
+                return Err(anyhow!("Configuration file validation failed: {}", e));
+            }
+        }
+    } else {
+        println!("❌ Configuration file: {} (missing)", config_path.display());
+    }
+
+    println!();
+
+    // Display encryption key status
+    if key_exists {
+        println!("✅ Encryption key: Found for repository '{repo_name}'");
+        println!("   📍 Location: {}", keys_file_path.display());
+    } else {
+        println!("❌ Encryption key: Not found for repository '{repo_name}'");
+        if keys_file_path.exists() {
+            println!("   📍 Keys file exists at: {}", keys_file_path.display());
+            println!("   ⚠️  But no key found for this repository");
+        } else {
+            println!("   📍 Keys file missing: {}", keys_file_path.display());
+        }
+    }
+
+    println!();
+
+    // Summary and recommendations
+    match (config_exists, key_exists) {
+        (true, true) => {
+            println!("🎉 Setup is complete and valid!");
+            println!(
+                "   You can now run 'encrypt' to encrypt secrets or 'decrypt' to decrypt them."
+            );
+        }
+        (true, false) => {
+            println!(
+                "⚠️  Setup is incomplete: Configuration exists but encryption key is missing."
+            );
+            println!("   Please run this command in a fresh directory to generate a new key,");
+            println!("   or manually add the key to {}", keys_file_path.display());
+        }
+        (false, true) => {
+            println!(
+                "⚠️  Setup is incomplete: Encryption key exists but configuration is missing."
+            );
+            println!(
+                "   Please run this command in a fresh directory to create the configuration."
+            );
+        }
+        (false, false) => unreachable!("This case is handled by initial setup"),
+    }
+
+    Ok(())
+}
+
+/// Encrypts secrets from ~/.mobile-secrets to .a8c-secrets/*.enc files.
+///
+/// This function:
+/// - Loads the `.a8c-secrets/config.yaml` configuration
+/// - Obtains the encryption key from environment variable or ~/.mobile-secrets
+/// - Reads each source file from ~/.mobile-secrets
+/// - Encrypts the content and writes to `.a8c-secrets/*.enc` files
+/// - Updates the SHA1 in the config to match current ~/.mobile-secrets HEAD
+///
+/// # Arguments
+/// - `repo_path` - Path to the repository directory
+///
+/// # Returns
+/// - `Ok(())` if all secrets are successfully encrypted and written
+/// - `Err(anyhow::Error)` if key retrieval, encryption, or file I/O fails
+pub fn encrypt_command(repo_path: &Path) -> Result<()> {
+    info!("Running encrypt command");
+    let mobile_secrets_path = get_mobile_secrets_path()?;
+    debug!("Mobile secrets path: {}", mobile_secrets_path.display());
+
+    // Check if mobile-secrets repository is up-to-date
+    check_mobile_secrets_up_to_date(&mobile_secrets_path)?;
+
+    let mut config = load_config(repo_path)?;
+    debug!("Loaded config with {} files", config.files.len());
+
+    let repo_name = get_repo_name(repo_path)?;
+    let mobile_secrets_path = get_mobile_secrets_path()?;
+    let key = get_encryption_key_for_repo(&repo_name, &mobile_secrets_path)?;
+
+    // Update SHA1 to current HEAD of mobile-secrets repo
+    config.sha1 = get_mobile_secrets_head_sha1(&mobile_secrets_path)?;
+
+    // Write updated config back to file
+    let config_yaml = serde_yaml::to_string(&config)?;
+    let config_path = repo_path
+        .join(REPO_SECRETS_DIR)
+        .join(REPO_SECRETS_CONFIG_FILE);
+    fs::write(&config_path, config_yaml)?;
+
+    // Create secrets directory (should already exist, but ensure it does)
+    let secrets_dir = repo_path.join(REPO_SECRETS_DIR);
+    fs::create_dir_all(&secrets_dir)?;
+
+    if config.files.is_empty() {
+        println!("⚠️  No secret files configured for encryption.");
+        println!("Edit {} to add files to sync.", config_path.display());
+        return Ok(());
+    }
+
+    for file_config in &config.files {
+        debug!(
+            "Processing file: {} -> {}",
+            file_config.source, file_config.destination
+        );
+
+        // Validate source path
+        validate_source_path(&file_config.source, &mobile_secrets_path)?;
+
+        let source_path = mobile_secrets_path.join(&file_config.source);
+
+        // Check if the destination file would be ignored by git
+        ensure_destination_is_git_ignored(&file_config.destination, repo_path)?;
+
+        let content = fs::read(&source_path).map_err(|e| {
+            anyhow!(
+                "Failed to read source file {}: {}\n\n\
+                Please check that you have read permissions for the file.",
+                source_path.display(),
+                e
+            )
+        })?;
+
+        let encrypted = encrypt_data(&content, &key)?;
+
+        let dest_filename = Path::new(&file_config.source)
+            .file_name()
+            .ok_or_else(|| {
+                anyhow!(
+                    "Invalid source path '{}': cannot extract filename.\n\n\
+                The source path must point to a file, not a directory.",
+                    file_config.source
+                )
+            })?
+            .to_str()
+            .ok_or_else(|| {
+                anyhow!(
+                    "Invalid source path '{}': filename contains invalid UTF-8 characters",
+                    file_config.source
+                )
+            })?;
+        let encrypted_path = secrets_dir.join(format!("{dest_filename}.enc"));
+
+        fs::write(&encrypted_path, encrypted).map_err(|e| {
+            anyhow!(
+                "Failed to write encrypted file {}: {}\n\n\
+                Please check that you have write permissions in the repository directory.",
+                encrypted_path.display(),
+                e
+            )
+        })?;
+
+        println!(
+            "Encrypted {} -> {}",
+            file_config.source,
+            encrypted_path.display()
+        );
+    }
+
+    println!("✅ Encryption of secrets files from `~/.mobile-secrets` into `.enc` files in your repository is complete!");
+    println!("✅ You can now commit and push the changes to the `.enc` files in your repository,");
+    println!(
+        "   and run `a8c-secrets decrypt` to decrypt them to their configured local destination."
+    );
+
+    Ok(())
+}
+
+/// Decrypts secrets from .a8c-secrets/*.enc files to their configured destinations.
+///
+/// This function:
+/// - Loads the `.a8c-secrets/config.yaml` configuration
+/// - Obtains the decryption key from environment variable or ~/.mobile-secrets
+/// - Decrypts each `.a8c-secrets/*.enc` file
+/// - Writes decrypted content to the destination paths specified in config
+/// - Creates destination directories as needed
+///
+/// # Arguments
+/// - `repo_path` - Path to the repository directory
+///
+/// # Returns
+/// - `Ok(())` if all secrets are successfully decrypted and written
+/// - `Err(anyhow::Error)` if key retrieval, decryption, or file I/O fails
+pub fn decrypt_command(repo_path: &Path) -> Result<()> {
+    info!("Running decrypt command");
+    let config = load_config(repo_path)?;
+    debug!("Loaded config with {} files", config.files.len());
+
+    let repo_name = get_repo_name(repo_path)?;
+    let mobile_secrets_path = get_mobile_secrets_path()?;
+    let key = get_encryption_key_for_repo(&repo_name, &mobile_secrets_path)?;
+
+    if config.files.is_empty() {
+        println!("⚠️  No secret files configured for decryption.");
+        println!(
+            "Edit {} to add files to sync.",
+            repo_path
+                .join(REPO_SECRETS_DIR)
+                .join(REPO_SECRETS_CONFIG_FILE)
+                .display()
+        );
+        return Ok(());
+    }
+
+    for file_config in &config.files {
+        debug!(
+            "Processing file: {} -> {}",
+            file_config.source, file_config.destination
+        );
+
+        // Construct the full destination path
+        let destination_path = if Path::new(&file_config.destination).is_absolute() {
+            Path::new(&file_config.destination).to_path_buf()
+        } else {
+            repo_path.join(&file_config.destination)
+        };
+
+        // Check if the destination file would be ignored by git (early validation)
+        ensure_destination_is_git_ignored(&file_config.destination, repo_path)?;
+
+        let source_filename = Path::new(&file_config.source)
+            .file_name()
+            .ok_or_else(|| {
+                anyhow!(
+                    "Invalid source path '{}': cannot extract filename.\n\n\
+                The source path must point to a file, not a directory.",
+                    file_config.source
+                )
+            })?
+            .to_str()
+            .ok_or_else(|| {
+                anyhow!(
+                    "Invalid source path '{}': filename contains invalid UTF-8 characters",
+                    file_config.source
+                )
+            })?;
+        let encrypted_path = repo_path
+            .join(REPO_SECRETS_DIR)
+            .join(format!("{source_filename}.enc"));
+
+        if !encrypted_path.exists() {
+            return Err(anyhow!(
+                "Encrypted file not found: {}\n\n\
+                Expected location: {}\n\
+                Source configured as: {}\n\
+                Destination configured as: {}\n\n\
+                This usually means:\n\
+                1. The encrypted file hasn't been created yet - run 'a8c-secrets encrypt' first\n\
+                2. The source filename in the configuration is incorrect\n\
+                3. The encrypted file was manually deleted",
+                source_filename,
+                encrypted_path.display(),
+                file_config.source,
+                file_config.destination
+            ));
+        }
+
+        let encrypted = fs::read(&encrypted_path).map_err(|e| {
+            anyhow!(
+                "Failed to read encrypted file {}: {}\n\n\
+                Please check that you have read permissions for the file.",
+                encrypted_path.display(),
+                e
+            )
+        })?;
+
+        let decrypted = decrypt_data(&encrypted, &key).map_err(|e| {
+            anyhow!(
+                "Failed to decrypt file {}: {}\n\n\
+                This could indicate:\n\
+                1. The file was corrupted\n\
+                2. Wrong encryption key for this repository\n\
+                3. The file was not encrypted with a8c-secrets",
+                encrypted_path.display(),
+                e
+            )
+        })?;
+
+        // Ensure destination directory exists
+        if let Some(parent) = destination_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                anyhow!(
+                    "Failed to create destination directory {}: {}\n\n\
+                    Please check that you have write permissions.",
+                    parent.display(),
+                    e
+                )
+            })?;
+        }
+
+        fs::write(&destination_path, decrypted).map_err(|e| {
+            anyhow!(
+                "Failed to write decrypted file {}: {}\n\n\
+                Please check that you have write permissions for the destination.",
+                destination_path.display(),
+                e
+            )
+        })?;
+
+        println!(
+            "Decrypted {} -> {}",
+            encrypted_path.display(),
+            destination_path.display()
+        );
+    }
+
+    println!("✅ Decryption of `.enc` secrets files to their configured destinations is complete!");
+
+    Ok(())
+}
